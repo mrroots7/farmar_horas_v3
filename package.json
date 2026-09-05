@@ -1,0 +1,14 @@
+{
+  "name": "farmar-horas",
+  "version": "1.0.0",
+  "description": "Painel de contas Steam para farmar horas de jogo",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "steam-user": "^5.3.0"
+  }
+}

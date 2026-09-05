@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Steam Hours Farmer</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">SF</div>
+        <div>
+          <h1>Steam Hours Farmer</h1>
+          <p>Painel de contas e jogos ativos</p>
+        </div>
+      </div>
+      <div class="pill"><span class="dot"></span> Sistema ativo</div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('dash', this)">Dashboard</button>
+      <button class="tab" onclick="showTab('profiles', this)">Perfis</button>
+    </div>
+
+    <div id="tab-dash">
+      <div class="grid">
+        <section class="card">
+          <h2>Nova conta</h2>
+          <form id="addForm">
+            <div class="form-group">
+              <label>Usuário Steam</label>
+              <input id="username" required autocomplete="username">
+            </div>
+            <div class="form-group">
+              <label>Senha</label>
+              <input id="password" type="password" required autocomplete="current-password">
+            </div>
+            <div class="form-group">
+              <label>AppIDs (ex: 730, 570)</label>
+              <input id="games" value="730">
+            </div>
+            <button class="btn btn-primary" type="submit">Adicionar conta</button>
+          </form>
+          <div id="message"></div>
+        </section>
+
+        <section class="card">
+          <h2>Contas em tempo real</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Conta</th>
+                  <th>Status</th>
+                  <th>Tempo</th>
+                  <th>Jogos</th>
+                </tr>
+              </thead>
+              <tbody id="accountsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="tab-profiles" class="hidden">
+      <div id="profilesContainer"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
