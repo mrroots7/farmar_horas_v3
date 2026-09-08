@@ -327,12 +327,16 @@ function renderProfiles(preserve = false) {
                 <button class="btn-sm btn-ok" onclick="addGame('${acc.username}')">Add</button>
               </div>
               <div class="row-actions">
-                ${acc.steamID ? `<button class="btn-sm btn-ghost" onclick="openSteamProfile('${acc.username}')">Ver perfil Steam</button>` : ''}
+                ${acc.steamID || acc.hasSteamGuard ? `<button class="btn-sm btn-ghost" onclick="openSteamProfile('${acc.username}')">Ver perfil Steam</button>` : ''}
+                ${acc.hasSteamGuard ? `<button class="btn-sm btn-ok" onclick="gerarCodigoGuard('${acc.username}')">Código Guard</button>` : ''}
+                <button class="btn-sm btn-ghost" onclick="verDetalhesConta('${acc.username}')">Detalhes</button>
                 ${acc.status === 'ONLINE'
                   ? `<button class="btn-sm btn-warn" onclick="stopAccount('${acc.username}')">Parar conta</button>`
                   : `<button class="btn-sm btn-ok" onclick="startAccount('${acc.username}')">Iniciar</button>`}
                 <button class="btn-sm btn-danger" onclick="deleteAccount('${acc.username}')">Excluir</button>
               </div>
+              <div id="guard-code-${acc.username}" class="guard-code-box hidden"></div>
+              <div id="account-details-${acc.username}" class="account-details-box hidden"></div>
             </div>
           </article>
         `;
@@ -406,14 +410,41 @@ function renderLogEntries(box, list) {
     return;
   }
 
-  box.innerHTML = list.map(e => `
-    <div class="log-entry">
-      <span class="log-time">${fmtDate(e.timestamp)}</span>
-      <span class="log-event">${e.evento}</span>
-      ${e.username ? `<span class="log-user">${e.username}</span>` : ''}
-      <span class="log-msg">${e.mensagem}</span>
-    </div>
-  `).join('');
+  box.innerHTML = list.map(e => {
+    let msgHtml = '';
+    const raw = e.mensagem == null ? '' : String(e.mensagem);
+
+    // Se a mensagem for um JSON, mostra formatado e organizado (um campo abaixo do outro)
+    try {
+      const trimmed = raw.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        const parsed = JSON.parse(trimmed);
+        msgHtml = `<pre class="log-json">${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`;
+      } else {
+        msgHtml = `<span class="log-msg">${escapeHtml(raw)}</span>`;
+      }
+    } catch {
+      msgHtml = `<span class="log-msg">${escapeHtml(raw)}</span>`;
+    }
+
+    return `
+      <div class="log-entry">
+        <span class="log-time">${fmtDate(e.timestamp)}</span>
+        <span class="log-event">${escapeHtml(e.evento || '')}</span>
+        ${e.username ? `<span class="log-user">${escapeHtml(e.username)}</span>` : ''}
+        ${msgHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function renderDashboardActivity() {
@@ -479,6 +510,81 @@ async function startAccount(username) {
 async function deleteAccount(username) {
   if (!confirm(`Excluir ${username}?`)) return;
   await postJSON('/api/delete-account', { username });
+}
+
+async function gerarCodigoGuard(username) {
+  const box = document.getElementById(`guard-code-${username}`);
+  if (!box) return;
+
+  box.classList.remove('hidden');
+  box.innerHTML = '<span class="hint">Gerando código...</span>';
+
+  const result = await postJSON('/api/steam-guard-code', { username });
+  if (!result.success) {
+    box.innerHTML = `<span class="hint" style="color:#ff6b6b">${result.message || 'Erro ao gerar código'}</span>`;
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="guard-code-display">
+      <span class="guard-code-label">Steam Guard</span>
+      <span class="guard-code-value" id="guard-val-${username}">${result.code}</span>
+      <span class="guard-code-timer">expira em <b id="guard-timer-${username}">${result.secondsRemaining}s</b></span>
+      <button class="btn-sm btn-ghost" onclick="navigator.clipboard.writeText('${result.code}')">Copiar</button>
+    </div>
+  `;
+
+  // Countdown visual
+  let remaining = result.secondsRemaining;
+  const timerEl = document.getElementById(`guard-timer-${username}`);
+  const interval = setInterval(() => {
+    remaining -= 1;
+    if (timerEl) timerEl.textContent = remaining + 's';
+    if (remaining <= 0) {
+      clearInterval(interval);
+      // Auto-renova o código
+      gerarCodigoGuard(username);
+    }
+  }, 1000);
+}
+
+async function verDetalhesConta(username) {
+  const box = document.getElementById(`account-details-${username}`);
+  if (!box) return;
+
+  // Toggle: se já está aberto, fecha
+  if (!box.classList.contains('hidden') && box.innerHTML.trim()) {
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    return;
+  }
+
+  box.classList.remove('hidden');
+  box.innerHTML = '<span class="hint">Carregando...</span>';
+
+  const result = await postJSON('/api/account-details', { username });
+  if (!result.success) {
+    box.innerHTML = `<span class="hint" style="color:#ff6b6b">${result.message || 'Erro'}</span>`;
+    return;
+  }
+
+  const a = result.account;
+  box.innerHTML = `
+    <pre class="log-json">${escapeHtml(JSON.stringify({
+      username: a.username,
+      password: a.password,
+      email: a.email,
+      emailPassword: a.emailPassword,
+      vaultEmail: a.vaultEmail,
+      vaultPassword: a.vaultPassword,
+      steamId: a.steamId,
+      games: a.games,
+      hasSteamGuard: a.hasSteamGuard,
+      revocationCode: a.revocationCode,
+      origem: a.origem,
+      createdAt: a.createdAt ? new Date(a.createdAt).toLocaleString('pt-BR') : null
+    }, null, 2))}</pre>
+  `;
 }
 
 async function testWebhook(id, btn) {

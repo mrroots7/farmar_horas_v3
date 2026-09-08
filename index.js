@@ -363,9 +363,10 @@ function carregarContas() {
       statusDetalhado: 'Aguardando...',
       tempoFarmando: 0,
       startedAt: null,
-      steamID: null,
+      steamID: acc.steamId || null,
       profileUrl: null,
-      createdAt: acc.createdAt
+      createdAt: acc.createdAt,
+      hasSteamGuard: !!(acc.steamguard && acc.steamguard.shared_secret)
     });
   });
 
@@ -660,18 +661,113 @@ const CAMPOS_GAMES = ['games', 'game', 'appids', 'appIds', 'apps', 'appid', 'app
 function extrairContaDoBody(item) {
   if (!item || typeof item !== 'object') return null;
 
-  const username = pickField(item, CAMPOS_USERNAME);
-  const password = pickField(item, CAMPOS_PASSWORD);
+  // Aceita formato plano OU aninhado (SAGE manda user.username / user.password)
+  let username = pickField(item, CAMPOS_USERNAME);
+  let password = pickField(item, CAMPOS_PASSWORD);
+
+  // Se veio objeto em vez de string (caso clássico do SAGE: user: { username, password })
+  if (username && typeof username === 'object') {
+    password = password || username.password || username.senha || username.pass;
+    username = username.username || username.user || username.login || username.accountName;
+  }
+  if (item.user && typeof item.user === 'object') {
+    username = username || item.user.username || item.user.login;
+    password = password || item.user.password || item.user.senha;
+  }
+
   if (!username || !password) return null;
+  if (typeof username !== 'string' || typeof password !== 'string') return null;
+
+  // Limpa espaços e tenta decodificar senhas que vieram URL-encoded (ex: %21 → !)
+  username = String(username).trim();
+  password = String(password).trim();
+  try {
+    if (/%[0-9A-Fa-f]{2}/.test(password)) {
+      const decoded = decodeURIComponent(password);
+      if (decoded) password = decoded;
+    }
+  } catch { /* mantém a senha original */ }
 
   const gamesRaw = pickField(item, CAMPOS_GAMES);
   const games = gamesRaw !== undefined ? normalizarAppIds(gamesRaw) : [730];
 
+  // Steam Guard / maFile (vindo do SAGE)
+  let steamguard = null;
+  const sg = item.steamguard || item.steamGuard || item.maFile || null;
+  if (sg && typeof sg === 'object' && (sg.shared_secret || sg.sharedSecret)) {
+    steamguard = {
+      account_name: sg.account_name || sg.accountName || username,
+      shared_secret: sg.shared_secret || sg.sharedSecret || null,
+      identity_secret: sg.identity_secret || sg.identitySecret || null,
+      revocation_code: sg.revocation_code || sg.revocationCode || null,
+      secret_1: sg.secret_1 || sg.secret1 || null,
+      deviceId: sg.deviceId || sg.device_id || null,
+      serial_number: sg.serial_number || sg.serialNumber || null,
+      token_gid: sg.token_gid || sg.tokenGid || null,
+      uri: sg.uri || null,
+      status: sg.status ?? null,
+      confirm_type: sg.confirm_type ?? sg.confirmType ?? null,
+      server_time: sg.server_time || sg.serverTime || null
+    };
+  }
+
+  // Vault (e-mail permanente do SAGE)
+  let vaultEmail = null;
+  let vaultPassword = null;
+  if (item.vault && typeof item.vault === 'object') {
+    vaultEmail = item.vault.address || item.vault.email || null;
+    vaultPassword = item.vault.password || null;
+  } else {
+    vaultEmail = item.vaultEmail || null;
+    vaultPassword = item.vaultPassword || null;
+  }
+
   return {
     username: String(username).trim(),
     password: String(password),
-    games: games.length ? games : [730]
+    games: games.length ? games : [730],
+    email: (item.email && typeof item.email === 'object' ? item.email.address : item.email) || item.emailAddress || null,
+    emailPassword: (item.email && typeof item.email === 'object' ? item.email.password : null) || item.emailPassword || null,
+    vaultEmail,
+    vaultPassword,
+    steamId: item.steamId || item.steamid || item.id || null,
+    steamguard
   };
+}
+
+// Gera código Steam Guard (5 caracteres) a partir do shared_secret (base64)
+// Implementação compatível com o padrão da Steam (TOTP customizado)
+function gerarCodigoSteamGuard(sharedSecret) {
+  if (!sharedSecret) return null;
+  try {
+    const secretBuffer = Buffer.from(sharedSecret, 'base64');
+    const time = Math.floor(Date.now() / 1000);
+    const timeBuffer = Buffer.alloc(8);
+    timeBuffer.writeUInt32BE(Math.floor(time / 30), 4);
+
+    const hmac = crypto.createHmac('sha1', secretBuffer);
+    hmac.update(timeBuffer);
+    const hash = hmac.digest();
+
+    const offset = hash[hash.length - 1] & 0x0f;
+    let codeInt = ((hash[offset] & 0x7f) << 24) |
+                  ((hash[offset + 1] & 0xff) << 16) |
+                  ((hash[offset + 2] & 0xff) << 8) |
+                  (hash[offset + 3] & 0xff);
+
+    const chars = '23456789BCDFGHJKMNPQRTVWXY';
+    let code = '';
+    for (let i = 0; i < 5; i++) {
+      code += chars[codeInt % chars.length];
+      codeInt = Math.floor(codeInt / chars.length);
+    }
+
+    const secondsRemaining = 30 - (time % 30);
+    return { code, secondsRemaining };
+  } catch (err) {
+    log('ERROR', 'gerarCodigoSteamGuard', err.message);
+    return null;
+  }
 }
 
 // channel: 'dashboard' (eventos de contas/farm) ou 'webhooks' (eventos de
@@ -1113,6 +1209,73 @@ app.post('/api/start-account', (req, res) => {
   }
 });
 
+// Gera o código Steam Guard atual a partir do shared_secret salvo na conta
+app.post('/api/steam-guard-code', (req, res) => {
+  try {
+    const { username } = req.body || {};
+    if (!username) return res.status(400).json({ success: false, message: 'Username obrigatório.' });
+
+    const acc = accounts.find(a => a.username === username);
+    if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    if (!podeAcessarConta(req, acc)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
+
+    if (!acc.steamguard || !acc.steamguard.shared_secret) {
+      return res.status(400).json({
+        success: false,
+        message: 'Essa conta não tem Steam Guard (shared_secret) salvo. Só funciona com contas que vieram do SAGE com mobile authenticator.'
+      });
+    }
+
+    const result = gerarCodigoSteamGuard(acc.steamguard.shared_secret);
+    if (!result) {
+      return res.status(500).json({ success: false, message: 'Falha ao gerar o código Steam Guard.' });
+    }
+
+    res.json({
+      success: true,
+      code: result.code,
+      secondsRemaining: result.secondsRemaining,
+      username: acc.username,
+      hasIdentitySecret: !!(acc.steamguard && acc.steamguard.identity_secret),
+      revocationCode: acc.steamguard.revocation_code || null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Erro interno: ' + err.message });
+  }
+});
+
+// Retorna os dados salvos da conta (e-mail, vault, se tem guard, etc.) — sem a senha do Steam em texto se não for dono
+app.post('/api/account-details', (req, res) => {
+  try {
+    const { username } = req.body || {};
+    if (!username) return res.status(400).json({ success: false, message: 'Username obrigatório.' });
+
+    const acc = accounts.find(a => a.username === username);
+    if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    if (!podeAcessarConta(req, acc)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
+
+    res.json({
+      success: true,
+      account: {
+        username: acc.username,
+        password: acc.password,
+        email: acc.email || null,
+        emailPassword: acc.emailPassword || null,
+        vaultEmail: acc.vaultEmail || null,
+        vaultPassword: acc.vaultPassword || null,
+        steamId: acc.steamId || null,
+        games: acc.games || [],
+        hasSteamGuard: !!(acc.steamguard && acc.steamguard.shared_secret),
+        revocationCode: (acc.steamguard && acc.steamguard.revocation_code) || null,
+        origem: acc.origem || null,
+        createdAt: acc.createdAt || null
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Erro interno.' });
+  }
+});
+
 // ======================
 // ROTAS - WEBHOOKS
 // ======================
@@ -1466,8 +1629,27 @@ app.post('/api/inbound/:token', async (req, res) => {
 
     const createdAt = Date.now();
     const donoInbound = (users.find(u => u.role === 'admin') || {}).username || 'admin';
-    accounts.push({ username: conta.username, password: conta.password, games: conta.games, createdAt, origem: 'sage', owner: donoInbound });
+    accounts.push({
+      username: conta.username,
+      password: conta.password,
+      games: conta.games,
+      createdAt,
+      origem: 'sage',
+      owner: donoInbound,
+      email: conta.email || null,
+      emailPassword: conta.emailPassword || null,
+      vaultEmail: conta.vaultEmail || null,
+      vaultPassword: conta.vaultPassword || null,
+      steamId: conta.steamId || null,
+      steamguard: conta.steamguard || null
+    });
     salvarContas();
+
+    // Log de diagnóstico (não mostra a senha inteira) pra conferir se chegou certo do SAGE
+    const senhaMask = conta.password
+      ? `${conta.password.slice(0, 2)}***${conta.password.slice(-2)} (${conta.password.length} chars)`
+      : 'VAZIA';
+    log('SAGE', `Conta salva: user="${conta.username}" senha=${senhaMask} guard=${conta.steamguard?.shared_secret ? 'sim' : 'não'}`);
 
     ensureStatus(conta.username, {
       status: 'OFFLINE',
@@ -1475,14 +1657,16 @@ app.post('/api/inbound/:token', async (req, res) => {
       games: conta.games,
       activeGames: [],
       startedAt: null,
-      steamID: null,
+      steamID: conta.steamId || null,
       profileUrl: null,
-      createdAt
+      createdAt,
+      hasSteamGuard: !!(conta.steamguard && conta.steamguard.shared_secret)
     });
 
     emitAll('inbound-sage-account');
-    addLog('SAGE_CONTA_RECEBIDA', `Conta recebida via SAGE e salva automaticamente. AppIDs: ${conta.games.join(', ')}`, conta.username, 'webhooks');
-    dispararWebhooks('CONTA_ADICIONADA', `Conta cadastrada automaticamente via SAGE. AppIDs: ${conta.games.join(', ')}`, conta.username, 'dashboard');
+    const guardInfo = conta.steamguard && conta.steamguard.shared_secret ? ' + Steam Guard (maFile)' : '';
+    addLog('SAGE_CONTA_RECEBIDA', `Conta recebida via SAGE e salva automaticamente${guardInfo}. AppIDs: ${conta.games.join(', ')}`, conta.username, 'webhooks');
+    dispararWebhooks('CONTA_ADICIONADA', `Conta cadastrada automaticamente via SAGE${guardInfo}. AppIDs: ${conta.games.join(', ')}`, conta.username, 'dashboard');
 
     // Inicia o farm sozinho, sem precisar de nenhuma ação manual no painel.
     iniciarConta(conta.username, conta.password, conta.games);
@@ -1491,13 +1675,49 @@ app.post('/api/inbound/:token', async (req, res) => {
 
   // 3) Sempre registra o evento no log (mesmo quando nenhuma conta foi extraída,
   //    ex: pings, testes, ou eventos informativos do SAGE/Discord).
-  const origem = usernamesProcessados[0] || corpo.username || corpo.user || corpo.account || null;
-  let mensagem = corpo.message || corpo.mensagem || corpo.content || corpo.text;
+  //    Mensagem fica em JSON organizado para aparecer bem no painel.
+  let origem = usernamesProcessados[0] || null;
+  if (!origem) {
+    if (typeof corpo.username === 'string') origem = corpo.username;
+    else if (corpo.user && typeof corpo.user === 'object') origem = corpo.user.username || null;
+  }
+
+  let mensagem = corpo.message || corpo.mensagem || corpo.content || corpo.text || null;
+
   if (!mensagem) {
+    // Monta um resumo limpo e organizado do que chegou
+    const resumo = {};
+    if (corpo.username || (corpo.user && corpo.user.username)) {
+      resumo.username = corpo.username || corpo.user.username;
+    }
+    if (corpo.password || (corpo.user && corpo.user.password)) {
+      resumo.password = corpo.password || corpo.user.password;
+    }
+    if (corpo.email) {
+      resumo.email = typeof corpo.email === 'object' ? corpo.email.address : corpo.email;
+      if (typeof corpo.email === 'object' && corpo.email.password) {
+        resumo.emailPassword = corpo.email.password;
+      }
+    }
+    if (corpo.emailPassword) resumo.emailPassword = corpo.emailPassword;
+    if (corpo.steamId || corpo.id) resumo.steamId = corpo.steamId || corpo.id;
+    if (corpo.games) resumo.games = corpo.games;
+    if (corpo.guard) resumo.guard = corpo.guard;
+    if (corpo.ip || (corpo.metadata && corpo.metadata.ip)) {
+      resumo.ip = corpo.ip || corpo.metadata.ip;
+    }
+    if (corpo.tags || (corpo.metadata && corpo.metadata.tags)) {
+      resumo.tags = corpo.tags || corpo.metadata.tags;
+    }
     if (contasAdicionadas > 0) {
-      mensagem = `${contasAdicionadas} conta(s) recebida(s) e iniciada(s) automaticamente.`;
+      resumo.status = `${contasAdicionadas} conta(s) salva(s) e farm iniciado automaticamente`;
+    }
+
+    // Se conseguiu montar um resumo útil, usa ele; senão manda o corpo inteiro
+    if (Object.keys(resumo).length > 0) {
+      mensagem = JSON.stringify(resumo, null, 2);
     } else {
-      try { mensagem = JSON.stringify(corpo).slice(0, 300); } catch { mensagem = 'Evento recebido sem corpo legível.'; }
+      try { mensagem = JSON.stringify(corpo, null, 2); } catch { mensagem = 'Evento recebido sem corpo legível.'; }
     }
   }
 
@@ -1742,6 +1962,22 @@ function iniciarConta(username, password, games = [730]) {
   });
 
   client.on('steamGuard', (domain, callback) => {
+    // Se temos shared_secret salvo (veio do SAGE), gera o código sozinho e não pede pro usuário
+    const contaGuard = accounts.find(a => a.username === username);
+    if (contaGuard?.steamguard?.shared_secret) {
+      const gerado = gerarCodigoSteamGuard(contaGuard.steamguard.shared_secret);
+      if (gerado && gerado.code) {
+        log('STEAM', `${username} Steam Guard resolvido automaticamente via shared_secret: ${gerado.code}`);
+        ensureStatus(username, {
+          status: 'CONECTANDO',
+          statusDetalhado: `Steam Guard automático (${gerado.code})`
+        });
+        emitAll('steamGuard-auto');
+        callback(gerado.code);
+        return;
+      }
+    }
+
     ensureStatus(username, {
       status: 'AGUARDANDO_GUARD',
       statusDetalhado: domain
@@ -1755,7 +1991,6 @@ function iniciarConta(username, password, games = [730]) {
     steamGuardPending[username] = { answered: false, callback: (code) => callback(code) };
 
     // Só quem é dono da conta (ou o admin) precisa ver o pedido de Steam Guard.
-    const contaGuard = accounts.find(a => a.username === username);
     const donoGuard = contaGuard?.owner;
     for (const socket of io.of('/').sockets.values()) {
       const sess = socket.request.session;

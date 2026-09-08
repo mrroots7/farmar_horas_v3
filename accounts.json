@@ -1,12 +1,81 @@
 [
   {
-    "username": "ljvzvupfqobyhvb38",
-    "password": "iRANq%w=DY5e",
+    "username": "nyxx346",
+    "password": "5mxTM1vybjBNKbp",
+    "games": [
+      730,
+      2139460
+    ],
+    "createdAt": 1788562259290,
+    "owner": "admin",
+    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0NjMyODE2MyIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcxNjQ0MjIsICJuYmYiOiAxNzgwMjE1NjI2LCAiaWF0IjogMTc4ODg1NTYyNiwgImp0aSI6ICIwMDAyXzI4QzBGM0Q5X0JCRDFFIiwgIm9hdCI6IDE3ODg4NTU2MjYsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.jzM_jtfW3BjdagylRz7XcrLX9U3wcc6ICWTckD6bt4IGBcAFf9TWzECuef-UQxfqp5oqo4wM6Fi0mQL_DzKrBQ"
+  },
+  {
+    "username": "wqvtlowcmzcczvwd62",
+    "password": "*Yiqb@JH4b2G",
     "games": [
       730
     ],
-    "createdAt": 1788850359273,
+    "createdAt": 1788856738085,
+    "origem": "sage",
     "owner": "admin",
-    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0NDkxMjYyMSIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcwOTI1MDMsICJuYmYiOiAxNzgwMjEwMzY1LCAiaWF0IjogMTc4ODg1MDM2NSwgImp0aSI6ICIwMDE0XzI4QzBGM0Q3X0FEQUY1IiwgIm9hdCI6IDE3ODg4NTAzNjUsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.ch3a0QNozZArs1vqecgdP8AjCJTC6HFRrw6P_mesx0ICmvDoFaJWP8FL10v3ByQci9l6vQUJ2gJPJqj4jrljBg"
+    "email": "a.cc.x.y.9+j35tgp4x2qmws@gmail.com",
+    "emailPassword": "/sRc7ErgYtAxwIkQMqEZ",
+    "vaultEmail": null,
+    "vaultPassword": null,
+    "steamId": "76561198644764557",
+    "steamguard": null,
+    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0NDc2NDU1NyIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcwMTIyODMsICJuYmYiOiAxNzgwMjE2NzM5LCAiaWF0IjogMTc4ODg1NjczOSwgImp0aSI6ICIwMDA5XzI4QzBGM0Q5XzBCMjNDIiwgIm9hdCI6IDE3ODg4NTY3MzksICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.wvTrcTX0wlwN7x-UXJX3G7EhlEdDKkTnl7Y3CRp0Rw740FGWg5HEs_TEKuDMyos1AjggU0OSyN9f_S15o_BPAw"
+  },
+  {
+    "username": "kyzuaxukasepa20",
+    "password": "kFKZ6*dJE-d5",
+    "games": [
+      730
+    ],
+    "createdAt": 1788857520096,
+    "origem": "sage",
+    "owner": "admin",
+    "email": "acc.x.y9+nnzffc6swlj5c@gmail.com",
+    "emailPassword": "KCrdpsugSnqu2COvZFmC",
+    "vaultEmail": null,
+    "vaultPassword": null,
+    "steamId": "76561198646580109",
+    "steamguard": null,
+    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0NjU4MDEwOSIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcxNTMxNjEsICJuYmYiOiAxNzgwMjE3NTIxLCAiaWF0IjogMTc4ODg1NzUyMSwgImp0aSI6ICIwMDEyXzI4QzBGM0RBXzRDMThGIiwgIm9hdCI6IDE3ODg4NTc1MjEsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.CXUnj-7WKJ2MRbKoZcbd1c0NDX2dJA7oQ82hBAOfZkY8fRr65m-qJezSM5cz99BnlFagNgUrzt_XPIQV_sVjBQ"
+  },
+  {
+    "username": "oviynvjzkczhfz72",
+    "password": "3z@-GYhZtTh_",
+    "games": [
+      730
+    ],
+    "createdAt": 1788857764733,
+    "origem": "sage",
+    "owner": "admin",
+    "email": "a.c.cxy.9+j3fc66qtdg3bs@gmail.com",
+    "emailPassword": "ATquhqnvIstG/y7CR+T7",
+    "vaultEmail": null,
+    "vaultPassword": null,
+    "steamId": "76561198643811033",
+    "steamguard": null,
+    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0MzgxMTAzMyIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcwMzk4OTUsICJuYmYiOiAxNzgwMjE3NzY1LCAiaWF0IjogMTc4ODg1Nzc2NSwgImp0aSI6ICIwMDE2XzI4QzBGM0RCXzNGQUE5IiwgIm9hdCI6IDE3ODg4NTc3NjUsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.748LdYjSL92Ta4Z3SjRBFMdqmZmns5yoypjrlWb8kkJpPFmPMcmX_qxTnuwCWtex9j03eM8pxxh7Uc6eiAVqDw"
+  },
+  {
+    "username": "ehzmrwhddlbnfula99",
+    "password": "GRrwRZQc$9Bt",
+    "games": [
+      730
+    ],
+    "createdAt": 1788857893581,
+    "origem": "sage",
+    "owner": "admin",
+    "email": "accx.y.9+4e6eznpcsef72@gmail.com",
+    "emailPassword": "lcln953XOk/EvHh6luyM",
+    "vaultEmail": null,
+    "vaultPassword": null,
+    "steamId": "76561198642913432",
+    "steamguard": null,
+    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0MjkxMzQzMiIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcwNDk4ODYsICJuYmYiOiAxNzgwMjE3ODk0LCAiaWF0IjogMTc4ODg1Nzg5NCwgImp0aSI6ICIwMDBDXzI4QzBGM0Q5XzRFNjFGIiwgIm9hdCI6IDE3ODg4NTc4OTQsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.Hd2MoKZDMhJIz0eFv_ExIenKWmC7EkQFqVtlQiJ7wvCVJtk6uPqNttwWWcZ0KQGUcD24Ofsn1_h3QVhzZ-o6BA"
   }
 ]

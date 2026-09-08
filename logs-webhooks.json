@@ -1,24 +1,290 @@
 [
   {
-    "id": "mtsahzf11dvwp",
-    "timestamp": 1788848985997,
-    "evento": "WEBHOOK_RECEBIDO",
-    "mensagem": "{\"id\":\"76561197960287930\",\"user\":{\"username\":\"jagyygailcsjdgcg60\",\"password\":\"+kcwJru8@h8d\"},\"email\":{\"address\":\"0123456789abcdef@demoemail.com\",\"password\":\"01234567890123456789\"},\"vault\":{\"address\":\"fedcba987654321@vault.com\",\"password\":\"98765432109876543210\"},\"metadata\":{\"createdAt\":1788848985991,",
-    "username": {
-      "username": "jagyygailcsjdgcg60",
-      "password": "+kcwJru8@h8d"
-    },
+    "id": "mtsdfcivdfqpv",
+    "timestamp": 1788853901863,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "npyciaoetodsylnz48",
     "channel": "webhooks"
   },
   {
-    "id": "mtsapacx80d9s",
-    "timestamp": 1788849326769,
+    "id": "mtsdfcix3su1c",
+    "timestamp": 1788853901865,
+    "evento": "SAGE_CONTAS_PROCESSADAS",
+    "mensagem": "1 conta(s) recebida(s) e iniciada(s) automaticamente.",
+    "username": "npyciaoetodsylnz48",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsemgqi4ydk4",
+    "timestamp": 1788855913530,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "nusqdkgcqllh80",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsemgqkn96km",
+    "timestamp": 1788855913532,
+    "evento": "SAGE_CONTAS_PROCESSADAS",
+    "mensagem": "{\n  \"username\": \"nusqdkgcqllh80\",\n  \"password\": \"a*Hmbns_Pu7G\",\n  \"email\": \"0123456789abcdef@demoemail.com\",\n  \"emailPassword\": \"01234567890123456789\",\n  \"steamId\": \"76561197960287930\",\n  \"status\": \"1 conta(s) salva(s) e farm iniciado automaticamente\"\n}",
+    "username": "nusqdkgcqllh80",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsemsql8f2jg",
+    "timestamp": 1788855929085,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "mgumapijhbllv83",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsemsqmpwac1",
+    "timestamp": 1788855929086,
+    "evento": "SAGE_CONTAS_PROCESSADAS",
+    "mensagem": "{\n  \"username\": \"mgumapijhbllv83\",\n  \"password\": \"6LWWr=^6avEd\",\n  \"email\": \"0123456789abcdef@demoemail.com\",\n  \"emailPassword\": \"01234567890123456789\",\n  \"steamId\": \"76561197960287930\",\n  \"status\": \"1 conta(s) salva(s) e farm iniciado automaticamente\"\n}",
+    "username": "mgumapijhbllv83",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsemt9z0eveg",
+    "timestamp": 1788855929783,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "stopwdvbyorosqn89",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsemta14j532",
+    "timestamp": 1788855929785,
+    "evento": "SAGE_CONTAS_PROCESSADAS",
+    "mensagem": "{\n  \"username\": \"stopwdvbyorosqn89\",\n  \"password\": \"=2ATLsibVCBL\",\n  \"email\": \"0123456789abcdef@demoemail.com\",\n  \"emailPassword\": \"01234567890123456789\",\n  \"steamId\": \"76561197960287930\",\n  \"status\": \"1 conta(s) salva(s) e farm iniciado automaticamente\"\n}",
+    "username": "stopwdvbyorosqn89",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsf32on55gxf",
+    "timestamp": 1788856688471,
+    "evento": "SAGE_ACCOUNT_CREATED",
+    "mensagem": "{\n  \"games\": [\n    730\n  ],\n  \"guard\": \"disable\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": null,
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsf44yudorm9",
+    "timestamp": 1788856738086,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "wqvtlowcmzcczvwd62",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsf44yw1mzak",
+    "timestamp": 1788856738088,
+    "evento": "SAGE_ACCOUNT_CREATED",
+    "mensagem": "{\n  \"username\": \"wqvtlowcmzcczvwd62\",\n  \"password\": \"*Yiqb@JH4b2G\",\n  \"email\": \"a.cc.x.y.9+j35tgp4x2qmws@gmail.com\",\n  \"emailPassword\": \"/sRc7ErgYtAxwIkQMqEZ\",\n  \"steamId\": \"76561198644764557\",\n  \"games\": [\n    730\n  ],\n  \"guard\": \"disable\",\n  \"ip\": \"165.16.244.205\",\n  \"tags\": [\n    \"nova\"\n  ],\n  \"status\": \"1 conta(s) salva(s) e farm iniciado automaticamente\"\n}",
+    "username": "wqvtlowcmzcczvwd62",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsf4fpwi91kg",
+    "timestamp": 1788856752020,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"wqvtlowcmzcczvwd62\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "wqvtlowcmzcczvwd62",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsf4fpxccabq",
+    "timestamp": 1788856752021,
     "evento": "WEBHOOK_RECEBIDO",
-    "mensagem": "{\"id\":\"76561197960287930\",\"user\":{\"username\":\"fpbcvnqzispnocd26\",\"password\":\"G46Q%#XvYg5@\"},\"email\":{\"address\":\"0123456789abcdef@demoemail.com\",\"password\":\"01234567890123456789\"},\"vault\":{\"address\":\"fedcba987654321@vault.com\",\"password\":\"98765432109876543210\"},\"metadata\":{\"createdAt\":1788849326765,\"",
-    "username": {
-      "username": "fpbcvnqzispnocd26",
-      "password": "G46Q%#XvYg5@"
-    },
+    "mensagem": "{\n  \"username\": \"wqvtlowcmzcczvwd62\",\n  \"password\": \"*Yiqb@JH4b2G\",\n  \"email\": \"a.cc.x.y.9+j35tgp4x2qmws@gmail.com\",\n  \"emailPassword\": \"/sRc7ErgYtAxwIkQMqEZ\",\n  \"steamId\": \"76561198644764557\",\n  \"ip\": \"165.16.244.205\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "wqvtlowcmzcczvwd62",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsf4gidmz5vj",
+    "timestamp": 1788856753045,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"wqvtlowcmzcczvwd62\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "wqvtlowcmzcczvwd62",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsf4gietmats",
+    "timestamp": 1788856753046,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"wqvtlowcmzcczvwd62\",\n  \"password\": \"*Yiqb@JH4b2G\",\n  \"email\": \"a.cc.x.y.9+j35tgp4x2qmws@gmail.com\",\n  \"emailPassword\": \"/sRc7ErgYtAxwIkQMqEZ\",\n  \"steamId\": \"76561198644764557\",\n  \"ip\": \"165.16.244.205\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "wqvtlowcmzcczvwd62",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkwdcyxfwe",
+    "timestamp": 1788857520096,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkwdegstfg",
+    "timestamp": 1788857520098,
+    "evento": "SAGE_ACCOUNT_CREATED",
+    "mensagem": "{\n  \"username\": \"kyzuaxukasepa20\",\n  \"password\": \"kFKZ6*dJE-d5\",\n  \"email\": \"acc.x.y9+nnzffc6swlj5c@gmail.com\",\n  \"emailPassword\": \"KCrdpsugSnqu2COvZFmC\",\n  \"steamId\": \"76561198646580109\",\n  \"games\": [\n    730\n  ],\n  \"guard\": \"disable\",\n  \"ip\": \"189.4.107.135\",\n  \"tags\": [\n    \"nova\"\n  ],\n  \"status\": \"1 conta(s) salva(s) e farm iniciado automaticamente\"\n}",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkx2iztpv9",
+    "timestamp": 1788857521002,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"kyzuaxukasepa20\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkx2iej67q",
+    "timestamp": 1788857521002,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"kyzuaxukasepa20\",\n  \"password\": \"kFKZ6*dJE-d5\",\n  \"email\": \"acc.x.y9+nnzffc6swlj5c@gmail.com\",\n  \"emailPassword\": \"KCrdpsugSnqu2COvZFmC\",\n  \"steamId\": \"76561198646580109\",\n  \"ip\": \"189.4.107.135\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkx701mn9k",
+    "timestamp": 1788857521164,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"kyzuaxukasepa20\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkx70247vo",
+    "timestamp": 1788857521164,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"kyzuaxukasepa20\",\n  \"password\": \"kFKZ6*dJE-d5\",\n  \"email\": \"acc.x.y9+nnzffc6swlj5c@gmail.com\",\n  \"emailPassword\": \"KCrdpsugSnqu2COvZFmC\",\n  \"steamId\": \"76561198646580109\",\n  \"ip\": \"189.4.107.135\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkx93m11bc",
+    "timestamp": 1788857521239,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"kyzuaxukasepa20\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfkx94h39ba",
+    "timestamp": 1788857521240,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"kyzuaxukasepa20\",\n  \"password\": \"kFKZ6*dJE-d5\",\n  \"email\": \"acc.x.y9+nnzffc6swlj5c@gmail.com\",\n  \"emailPassword\": \"KCrdpsugSnqu2COvZFmC\",\n  \"steamId\": \"76561198646580109\",\n  \"ip\": \"189.4.107.135\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "kyzuaxukasepa20",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfq54un068r",
+    "timestamp": 1788857764734,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "oviynvjzkczhfz72",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfq54xgvq3e",
+    "timestamp": 1788857764738,
+    "evento": "SAGE_ACCOUNT_CREATED",
+    "mensagem": "{\n  \"username\": \"oviynvjzkczhfz72\",\n  \"password\": \"3z@-GYhZtTh_\",\n  \"email\": \"a.c.cxy.9+j3fc66qtdg3bs@gmail.com\",\n  \"emailPassword\": \"ATquhqnvIstG/y7CR+T7\",\n  \"steamId\": \"76561198643811033\",\n  \"games\": [\n    730\n  ],\n  \"guard\": \"disable\",\n  \"ip\": \"23.147.120.27\",\n  \"tags\": [\n    \"nova\"\n  ],\n  \"status\": \"1 conta(s) salva(s) e farm iniciado automaticamente\"\n}",
+    "username": "oviynvjzkczhfz72",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfqatkhhb1k",
+    "timestamp": 1788857772104,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"oviynvjzkczhfz72\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "oviynvjzkczhfz72",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfqatkk6xzx",
+    "timestamp": 1788857772104,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"oviynvjzkczhfz72\",\n  \"password\": \"3z@-GYhZtTh_\",\n  \"email\": \"a.c.cxy.9+j3fc66qtdg3bs@gmail.com\",\n  \"emailPassword\": \"ATquhqnvIstG/y7CR+T7\",\n  \"steamId\": \"76561198643811033\",\n  \"ip\": \"23.147.120.27\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "oviynvjzkczhfz72",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfqb8q72pxz",
+    "timestamp": 1788857772650,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"oviynvjzkczhfz72\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "oviynvjzkczhfz72",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfqb8r2wbhg",
+    "timestamp": 1788857772651,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"oviynvjzkczhfz72\",\n  \"password\": \"3z@-GYhZtTh_\",\n  \"email\": \"a.c.cxy.9+j3fc66qtdg3bs@gmail.com\",\n  \"emailPassword\": \"ATquhqnvIstG/y7CR+T7\",\n  \"steamId\": \"76561198643811033\",\n  \"ip\": \"23.147.120.27\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "oviynvjzkczhfz72",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfs33zspjwe",
+    "timestamp": 1788857855423,
+    "evento": "WEBHOOK_ADICIONADO",
+    "mensagem": "Webhook \"contas\" (discord) cadastrado.",
+    "username": null,
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfswjy3e3n4",
+    "timestamp": 1788857893582,
+    "evento": "SAGE_CONTA_RECEBIDA",
+    "mensagem": "Conta recebida via SAGE e salva automaticamente. AppIDs: 730",
+    "username": "ehzmrwhddlbnfula99",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsfswk0kwyfr",
+    "timestamp": 1788857893584,
+    "evento": "SAGE_ACCOUNT_CREATED",
+    "mensagem": "{\n  \"username\": \"ehzmrwhddlbnfula99\",\n  \"password\": \"GRrwRZQc$9Bt\",\n  \"email\": \"accx.y.9+4e6eznpcsef72@gmail.com\",\n  \"emailPassword\": \"lcln953XOk/EvHh6luyM\",\n  \"steamId\": \"76561198642913432\",\n  \"games\": [\n    730\n  ],\n  \"guard\": \"disable\",\n  \"ip\": \"23.147.120.27\",\n  \"tags\": [\n    \"nova\"\n  ],\n  \"status\": \"1 conta(s) salva(s) e farm iniciado automaticamente\"\n}",
+    "username": "ehzmrwhddlbnfula99",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsft26bemzcp",
+    "timestamp": 1788857900867,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"ehzmrwhddlbnfula99\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "ehzmrwhddlbnfula99",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsft26bm5a8l",
+    "timestamp": 1788857900867,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"ehzmrwhddlbnfula99\",\n  \"password\": \"GRrwRZQc$9Bt\",\n  \"email\": \"accx.y.9+4e6eznpcsef72@gmail.com\",\n  \"emailPassword\": \"lcln953XOk/EvHh6luyM\",\n  \"steamId\": \"76561198642913432\",\n  \"ip\": \"23.147.120.27\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "ehzmrwhddlbnfula99",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsft2ldooywd",
+    "timestamp": 1788857901409,
+    "evento": "SAGE_CONTA_DUPLICADA",
+    "mensagem": "Conta \"ehzmrwhddlbnfula99\" recebida via SAGE já existia no painel — ignorada.",
+    "username": "ehzmrwhddlbnfula99",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtsft2le5vpw2",
+    "timestamp": 1788857901410,
+    "evento": "WEBHOOK_RECEBIDO",
+    "mensagem": "{\n  \"username\": \"ehzmrwhddlbnfula99\",\n  \"password\": \"GRrwRZQc$9Bt\",\n  \"email\": \"accx.y.9+4e6eznpcsef72@gmail.com\",\n  \"emailPassword\": \"lcln953XOk/EvHh6luyM\",\n  \"steamId\": \"76561198642913432\",\n  \"ip\": \"23.147.120.27\",\n  \"tags\": [\n    \"nova\"\n  ]\n}",
+    "username": "ehzmrwhddlbnfula99",
     "channel": "webhooks"
   }
 ]

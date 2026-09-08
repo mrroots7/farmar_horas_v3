@@ -908,6 +908,66 @@ tr:hover td { background: rgba(255, 31, 61, .04); }
   color: var(--text);
 }
 
+.log-json {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #0d0d0d;
+  border: 1px solid #333;
+  border-left: 3px solid var(--accent, #ff2d55);
+  border-radius: 6px;
+  color: #7dffa0;
+  font-size: 12px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 280px;
+  overflow-y: auto;
+  line-height: 1.45;
+}
+
+.guard-code-box,
+.account-details-box {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.guard-code-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  background: #0d0d0d;
+  border: 1px solid #333;
+  border-left: 3px solid #7dffa0;
+  border-radius: 8px;
+}
+
+.guard-code-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a93a5;
+}
+
+.guard-code-value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #7dffa0;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.guard-code-timer {
+  font-size: 12px;
+  color: #8a93a5;
+}
+
+.guard-code-timer b {
+  color: #ffd27d;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
   .grid { grid-template-columns: 1fr; }
