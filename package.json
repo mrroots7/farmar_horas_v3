@@ -1,7 +1,7 @@
 {
   "name": "farmar-horas",
-  "version": "3.4.0",
-  "description": "Painel de contas Steam para farmar horas de jogo, com login privado e webhooks (Discord/SAGE)",
+  "version": "4.0.0",
+  "description": "Painel de contas Steam para farmar horas de jogo, multiusuário com planos (Bronze/Prata/Ouro), Steam Guard, webhooks (Discord/SAGE) e API pública",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

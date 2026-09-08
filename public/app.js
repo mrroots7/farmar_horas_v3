@@ -4,9 +4,13 @@ let webhooksData = [];
 let dashboardActivityData = [];  // log em tempo real da aba Dashboard
 let webhooksActivityData = [];   // log em tempo real da aba Webhooks
 let profilesOpen = false;
+let bansOpen = false;
 let webhooksOpen = false;
 let dashOpen = true; // Dashboard é a aba inicial
 let apiOpen = false;
+let usersOpen = false;
+let me = null; // { user: {username, role, plan, planName}, limits: {...} }
+let usersList = [];
 let searchTerm = '';
 const openGames = new Set(); // usernames com o painel "Jogos ativos" expandido
 
@@ -16,19 +20,25 @@ function showTab(name, btn) {
 
   document.getElementById('tab-dash').classList.toggle('hidden', name !== 'dash');
   document.getElementById('tab-profiles').classList.toggle('hidden', name !== 'profiles');
+  document.getElementById('tab-bans').classList.toggle('hidden', name !== 'bans');
   document.getElementById('tab-webhooks').classList.toggle('hidden', name !== 'webhooks');
   document.getElementById('tab-api').classList.toggle('hidden', name !== 'api');
   document.getElementById('tab-importexport').classList.toggle('hidden', name !== 'importexport');
+  document.getElementById('tab-users').classList.toggle('hidden', name !== 'users');
 
   dashOpen = name === 'dash';
   profilesOpen = name === 'profiles';
+  bansOpen = name === 'bans';
   webhooksOpen = name === 'webhooks';
   apiOpen = name === 'api';
+  usersOpen = name === 'users';
 
-  if (dashOpen) renderDashboardActivity();
-  if (profilesOpen) { renderProfiles(true); loadSteamKeyInfo(); }
+  if (dashOpen) { renderDashboardActivity(); loadMe(); }
+  if (profilesOpen) { renderProfiles(true); if (me?.user?.role === 'admin') loadSteamKeyInfo(); }
+  if (bansOpen) { renderBansTable(); loadFaceitKeyInfo(); }
   if (webhooksOpen) { renderWebhooks(); renderWebhooksActivity(); loadInboundInfo(); }
   if (apiOpen) { loadApiToken(); renderApiEndpoints(); renderApiExample(); }
+  if (usersOpen) loadUsers();
 }
 
 // ======================
@@ -134,11 +144,13 @@ socket.on('update_all', (payload) => {
   data = payload || {};
   renderTable();
   if (profilesOpen) renderProfiles(true);
+  checkGuardOutcome();
 });
 
 socket.on('tick', (payload) => {
   data = payload || {};
   renderTable();
+  checkGuardOutcome();
 
   Object.values(data).forEach(acc => {
     (acc.activeGames || []).forEach(g => {
@@ -493,23 +505,167 @@ async function logout() {
   window.location.href = '/login.html';
 }
 
-// Pede o código do Steam Guard direto no navegador quando o servidor precisa dele
-// (antes só dava pra digitar no terminal, o que travava o farm se o processo
-// rodasse em segundo plano / sem terminal interativo).
-socket.on('steamGuard_request', ({ username, domain }) => {
-  const onde = domain ? `enviado para ${domain}` : 'do app Steam Guard';
-  const code = prompt(`Conta "${username}": digite o código Steam Guard ${onde}:`);
-  if (code && code.trim()) {
-    socket.emit('steamGuard_submit', { username, code: code.trim() });
-  } else {
-    alert(`Login de "${username}" cancelado: nenhum código informado.`);
-  }
-});
-
 document.getElementById('searchUser')?.addEventListener('input', (e) => {
   searchTerm = e.target.value || '';
   renderTable();
 });
+
+// ======================
+// BUSCAR JOGO PELO NOME (com foto pra confirmar) — usado no form "Nova conta"
+// ======================
+let selectedGames = [{ appId: 730, name: 'AppID 730 (padrão: Counter-Strike 2)', image: null }];
+let gameSearchDebounce = null;
+
+function syncGamesHiddenInput() {
+  document.getElementById('games').value = selectedGames.map(g => g.appId).join(',');
+}
+
+function renderSelectedGames() {
+  const box = document.getElementById('selectedGames');
+  if (!box) return;
+  box.innerHTML = selectedGames.map(g => `
+    <span class="game-chip">
+      ${g.image ? `<img src="${g.image}" alt="">` : ''}
+      ${escapeHtml(g.name || `AppID ${g.appId}`)}
+      <button type="button" onclick="removeSelectedGame(${g.appId})" title="Remover">&times;</button>
+    </span>
+  `).join('');
+  syncGamesHiddenInput();
+}
+
+function removeSelectedGame(appId) {
+  selectedGames = selectedGames.filter(g => g.appId !== appId);
+  renderSelectedGames();
+}
+
+function addSelectedGame(game) {
+  if (selectedGames.some(g => g.appId === game.appId)) return;
+  selectedGames.push(game);
+  renderSelectedGames();
+  document.getElementById('gameSearchResults').classList.add('hidden');
+  document.getElementById('gameSearchInput').value = '';
+}
+
+function addManualAppId() {
+  const input = document.getElementById('manualAppId');
+  const appId = Number(String(input?.value || '').trim());
+  if (!Number.isInteger(appId) || appId <= 0) return alert('AppID inválido.');
+  addSelectedGame({ appId, name: `AppID ${appId}`, image: null });
+  if (input) input.value = '';
+}
+
+function renderGameSearchResults(items) {
+  const box = document.getElementById('gameSearchResults');
+  if (!items.length) {
+    box.innerHTML = '<div class="game-search-empty">Nenhum jogo encontrado com esse nome.</div>';
+  } else {
+    box.innerHTML = items.map(it => `
+      <div class="game-search-item" onclick='addSelectedGame(${JSON.stringify(it).replace(/'/g, "&#39;")})'>
+        ${it.image ? `<img src="${it.image}" alt="">` : '<div style="width:62px;height:29px;background:#222;border-radius:4px;flex-shrink:0;"></div>'}
+        <div>
+          <div class="gsi-name">${escapeHtml(it.name)}</div>
+          <div class="gsi-appid">AppID ${it.appId}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+  box.classList.remove('hidden');
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+document.getElementById('gameSearchInput')?.addEventListener('input', (e) => {
+  const term = e.target.value.trim();
+  clearTimeout(gameSearchDebounce);
+  const spinner = document.getElementById('gameSearchSpinner');
+  const box = document.getElementById('gameSearchResults');
+
+  if (term.length < 2) {
+    box.classList.add('hidden');
+    spinner.classList.add('hidden');
+    return;
+  }
+
+  spinner.classList.remove('hidden');
+  gameSearchDebounce = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/steam/search-game?q=${encodeURIComponent(term)}`);
+      const result = await res.json();
+      renderGameSearchResults(result.items || []);
+    } catch {
+      renderGameSearchResults([]);
+    } finally {
+      spinner.classList.add('hidden');
+    }
+  }, 400);
+});
+
+document.addEventListener('click', (e) => {
+  const box = document.getElementById('gameSearchResults');
+  const input = document.getElementById('gameSearchInput');
+  if (box && !box.contains(e.target) && e.target !== input) box.classList.add('hidden');
+});
+
+renderSelectedGames();
+
+// ======================
+// STEAM GUARD — caixa com spinner (igual ao login), substitui o prompt() nativo
+// ======================
+let guardCurrentUsername = null;
+
+function closeGuardModal() {
+  document.getElementById('guardModalOverlay').classList.add('hidden');
+  guardCurrentUsername = null;
+}
+
+socket.on('steamGuard_request', ({ username, domain }) => {
+  guardCurrentUsername = username;
+  const onde = domain ? `Enviado para ${domain}` : 'Peça no seu app Steam Guard (celular)';
+  document.getElementById('guardModalSub').textContent = `Conta "${username}" — ${onde}`;
+  document.getElementById('guardCodeInput').value = '';
+  document.getElementById('guardMessage').textContent = '';
+  document.getElementById('guardForm').classList.remove('hidden');
+  document.getElementById('guardWaiting').classList.add('hidden');
+  document.getElementById('guardSubmitBtn').disabled = false;
+  document.getElementById('guardModalOverlay').classList.remove('hidden');
+  document.getElementById('guardCodeInput').focus();
+});
+
+document.getElementById('guardForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const code = document.getElementById('guardCodeInput').value.trim();
+  if (!code || !guardCurrentUsername) return;
+
+  socket.emit('steamGuard_submit', { username: guardCurrentUsername, code });
+  document.getElementById('guardForm').classList.add('hidden');
+  document.getElementById('guardWaiting').classList.remove('hidden');
+});
+
+// Observa o status da conta (via update_all/tick) enquanto o modal de Steam Guard
+// está esperando confirmação, pra saber se deu certo, código errado, ou expirou.
+function checkGuardOutcome() {
+  if (!guardCurrentUsername) return;
+  const waiting = !document.getElementById('guardWaiting').classList.contains('hidden');
+  if (!waiting) return;
+
+  const acc = data[guardCurrentUsername];
+  if (!acc) return;
+
+  if (acc.status === 'ONLINE') {
+    const msg = document.getElementById('guardMessage');
+    msg.style.color = '#8fe0b2';
+    msg.textContent = 'Código confirmado! Conta online.';
+    setTimeout(closeGuardModal, 1400);
+  } else if (acc.status === 'ERRO') {
+    document.getElementById('guardWaiting').classList.add('hidden');
+    const msg = document.getElementById('guardMessage');
+    msg.style.color = '#ffb0b0';
+    msg.textContent = acc.statusDetalhado || 'Falha ao confirmar o código.';
+    // deixa o modal aberto com a mensagem; o usuário fecha e tenta iniciar de novo
+  }
+}
 
 document.getElementById('addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -542,7 +698,11 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
 
   msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
   msg.textContent = result.message || '';
-  if (result.success) e.target.reset();
+  if (result.success) {
+    e.target.reset();
+    selectedGames = [{ appId: 730, name: 'AppID 730 (padrão: Counter-Strike 2)', image: null }];
+    renderSelectedGames();
+  }
 });
 
 document.getElementById('webhookForm').addEventListener('submit', async (e) => {
@@ -660,6 +820,145 @@ async function openSteamProfile(username) {
 
 function closeSteamProfile() {
   document.getElementById('steamModalOverlay').classList.add('hidden');
+}
+
+// ======================
+// ABA "BANS" (VAC/Game Ban + Faceit) — só admin
+// ======================
+async function loadFaceitKeyInfo() {
+  try {
+    const res = await fetch('/api/faceit-key');
+    const result = await res.json();
+    const input = document.getElementById('faceitKeyInput');
+    if (input && result.configured) input.placeholder = `Configurada (${result.hint})`;
+  } catch { }
+}
+
+async function saveFaceitKey() {
+  const input = document.getElementById('faceitKeyInput');
+  const msg = document.getElementById('faceitKeyMessage');
+  const key = input?.value.trim();
+  if (!key) return;
+
+  const result = await postJSON('/api/faceit-key', { key });
+  if (msg) {
+    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
+    msg.textContent = result.message || '';
+  }
+  if (result.success && input) { input.value = ''; loadFaceitKeyInfo(); }
+}
+
+function renderBansTable() {
+  const tbody = document.getElementById('bansTable');
+  if (!tbody) return;
+
+  const list = Object.values(data);
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="4">Nenhuma conta cadastrada.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = list.map(acc => {
+    const temCS2 = Array.isArray(acc.games) && acc.games.includes(730);
+    return `
+      <tr>
+        <td>${acc.username}</td>
+        <td>${acc.steamID || '<span class="hint">sem login ainda</span>'}</td>
+        <td>${temCS2 ? '<span class="badge b-online">Sim</span>' : '<span class="hint">Não</span>'}</td>
+        <td>
+          ${acc.steamID
+            ? `<button class="btn-sm btn-ghost" onclick="openBans('${acc.username}')">Consultar</button>`
+            : '<span class="hint">Aguardando login</span>'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function openBans(username) {
+  const overlay = document.getElementById('steamModalOverlay');
+  const body = document.getElementById('steamModalBody');
+  overlay.classList.remove('hidden');
+  body.innerHTML = '<div class="empty-box">Consultando bans...</div>';
+
+  try {
+    const res = await fetch(`/api/steam-bans/${encodeURIComponent(username)}`);
+    const result = await res.json();
+
+    if (!result.success) {
+      body.innerHTML = `<div class="empty-box">${result.message || 'Não foi possível consultar.'}</div>`;
+      return;
+    }
+
+    const b = result.bans;
+    const f = result.faceit;
+
+    const banRow = (label, ruim, textoRuim, textoOk) => `
+      <div class="steam-stat">
+        <span class="stat-label">${label}</span>
+        <div class="stat-value">
+          <span class="badge ${ruim ? 'b-erro' : 'b-online'}">${ruim ? textoRuim : textoOk}</span>
+        </div>
+      </div>
+    `;
+
+    let faceitHtml = '';
+    if (result.temCS2) {
+      if (f && f.temFaceit) {
+        faceitHtml = `
+          <div class="steam-stat">
+            <span class="stat-label">Faceit</span>
+            <div class="stat-value">
+              <a href="${f.faceitUrl || '#'}" target="_blank" rel="noopener">${f.nickname || 'perfil'}</a>
+              ${f.nivel !== null ? ` · Nível ${f.nivel}` : ''}${f.elo !== null ? ` · ${f.elo} elo` : ''}
+            </div>
+          </div>
+        `;
+      } else if (f && !f.temFaceit) {
+        faceitHtml = `
+          <div class="steam-stat">
+            <span class="stat-label">Faceit</span>
+            <div class="stat-value"><span class="badge b-erro">Sem conta vinculada</span></div>
+          </div>
+        `;
+      } else {
+        faceitHtml = `
+          <div class="steam-stat">
+            <span class="stat-label">Faceit</span>
+            <div class="stat-value hint">${result.faceitMessage || 'Não verificado.'}</div>
+          </div>
+        `;
+      }
+    }
+
+    body.innerHTML = `
+      <div class="steam-profile">
+        <div class="steam-profile-header">
+          <div class="steam-profile-main">
+            <div class="steam-persona">${username}</div>
+            <div class="hint">SteamID: ${result.steamID}</div>
+          </div>
+        </div>
+
+        <div class="steam-profile-grid">
+          ${banRow('VAC Ban', b.vacBanned, `Sim (${b.numeroVacBans})`, 'Não')}
+          ${banRow('Game Ban', b.numeroGameBans > 0, `${b.numeroGameBans} ban(s)`, 'Nenhum')}
+          ${banRow('Community Ban', b.communityBanned, 'Sim', 'Não')}
+          ${banRow('Economy Ban', !!b.economyBan, b.economyBan || '-', 'Nenhum')}
+          ${b.diasDesdeUltimoBan !== null && (b.vacBanned || b.numeroGameBans > 0)
+            ? `<div class="steam-stat"><span class="stat-label">Dias desde o último ban</span><div class="stat-value">${b.diasDesdeUltimoBan}</div></div>`
+            : ''}
+          ${faceitHtml}
+        </div>
+
+        <p class="hint" style="margin-top:12px">
+          A Steam não libera publicamente dado de "GC ban"/trust factor do CS2 pra terceiros — só o que aparece acima.
+        </p>
+      </div>
+    `;
+  } catch (err) {
+    body.innerHTML = `<div class="empty-box">Erro ao consultar: ${err.message}</div>`;
+  }
 }
 
 // ======================
@@ -887,3 +1186,167 @@ async function importConfig() {
     if (msg) { msg.style.color = '#ffb0b0'; msg.textContent = 'Arquivo inválido: ' + err.message; }
   }
 }
+
+// ======================
+// MULTIUSUÁRIO — badge no topo, limites do plano e aba de administração
+// ======================
+async function loadMe() {
+  try {
+    const res = await fetch('/api/me');
+    if (res.status === 401) { window.location.href = '/login.html'; return; }
+    const result = await res.json();
+    if (!result.success) return;
+    me = result;
+    applyMeToUI();
+  } catch { }
+}
+
+function applyMeToUI() {
+  if (!me) return;
+  const { user, limits } = me;
+  const isAdmin = user.role === 'admin';
+
+  const badge = document.getElementById('userBadge');
+  if (badge) {
+    badge.innerHTML = `<span class="dot"></span> ${escapeHtml(user.username)} · ${isAdmin ? 'Admin' : user.planName}`;
+  }
+
+  // Abas/telas que são só do painel inteiro (admin)
+  ['tabBtn-webhooks', 'tabBtn-api', 'tabBtn-importexport', 'tabBtn-bans'].forEach(id => {
+    document.getElementById(id)?.classList.toggle('hidden', !isAdmin);
+  });
+  document.getElementById('tabBtn-users')?.classList.toggle('hidden', !isAdmin);
+  document.getElementById('steamKeyCard')?.classList.toggle('hidden', !isAdmin);
+
+  const usage = document.getElementById('planUsageInfo');
+  if (usage) {
+    usage.textContent = isAdmin
+      ? 'Você é admin: sem limite de contas ou jogos.'
+      : `Plano ${user.planName}: ${limits.contasUsadas}/${limits.maxAccounts} conta(s) usadas · até ${limits.maxGames} jogo(s) por conta.`;
+  }
+
+  const sub = document.getElementById('accountModalSub');
+  if (sub) sub.textContent = `${user.username} · ${isAdmin ? 'Admin' : user.planName}`;
+
+  ensureAllowedTab();
+}
+
+// Se por acaso a aba ativa era uma exclusiva de admin e o usuário deixou de ser
+// admin (ou nunca foi), volta pro Dashboard pra não deixar o painel "preso".
+function ensureAllowedTab() {
+  if (me?.user?.role === 'admin') return;
+  if (webhooksOpen || apiOpen || usersOpen || bansOpen) {
+    const dashBtn = document.querySelector('.tabs .tab');
+    if (dashBtn) showTab('dash', dashBtn);
+  }
+}
+
+// ------ Modal "Minha conta" (trocar a própria senha) ------
+function openAccountModal() {
+  document.getElementById('accountNewPassword').value = '';
+  document.getElementById('accountModalMessage').textContent = '';
+  document.getElementById('accountModalOverlay').classList.remove('hidden');
+}
+
+function closeAccountModal() {
+  document.getElementById('accountModalOverlay').classList.add('hidden');
+}
+
+document.getElementById('accountPasswordForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const password = document.getElementById('accountNewPassword').value;
+  const msg = document.getElementById('accountModalMessage');
+  const result = await postJSON('/api/users/password', { password });
+  if (msg) {
+    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
+    msg.textContent = result.message || '';
+  }
+  if (result.success) document.getElementById('accountNewPassword').value = '';
+});
+
+// ------ Aba "Usuários" (só admin — o backend também bloqueia por segurança) ------
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/users');
+    const result = await res.json();
+    if (!result.success) return;
+    usersList = result.users || [];
+    renderUsers();
+  } catch { }
+}
+
+function renderUsers() {
+  const tbody = document.getElementById('usersTable');
+  if (!tbody) return;
+
+  if (!usersList.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="color:#97a0b5; text-align:center;">Nenhum usuário cadastrado</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = usersList.map(u => `
+    <tr>
+      <td><strong>${escapeHtml(u.username)}</strong></td>
+      <td>${u.role === 'admin' ? 'Admin' : 'Usuário'}</td>
+      <td>
+        <select id="plan-${escapeHtml(u.username)}" ${u.role === 'admin' ? 'disabled' : ''}>
+          <option value="bronze" ${u.plan === 'bronze' ? 'selected' : ''}>Bronze</option>
+          <option value="prata" ${u.plan === 'prata' ? 'selected' : ''}>Prata</option>
+          <option value="ouro" ${u.plan === 'ouro' ? 'selected' : ''}>Ouro</option>
+        </select>
+        <button class="btn-sm btn-ghost" onclick="changeUserPlan('${escapeHtml(u.username)}')" ${u.role === 'admin' ? 'disabled' : ''}>Salvar</button>
+      </td>
+      <td>${fmtDateOnly(u.createdAt)}</td>
+      <td class="users-actions">
+        <input type="password" id="pwd-${escapeHtml(u.username)}" placeholder="Nova senha" class="pwd-input">
+        <button class="btn-sm btn-ghost" onclick="resetUserPassword('${escapeHtml(u.username)}')">Definir senha</button>
+        <button class="btn-sm btn-danger" onclick="deleteUser('${escapeHtml(u.username)}')">Excluir</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('userForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('newUserUsername').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  const role = document.getElementById('newUserRole').value;
+  const plan = document.getElementById('newUserPlan').value;
+  const msg = document.getElementById('userMessage');
+
+  const result = await postJSON('/api/users', { username, password, role, plan });
+  if (msg) {
+    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
+    msg.textContent = result.message || '';
+  }
+  if (result.success) {
+    document.getElementById('userForm').reset();
+    loadUsers();
+  }
+});
+
+async function changeUserPlan(username) {
+  const select = document.getElementById(`plan-${username}`);
+  if (!select) return;
+  const result = await postJSON('/api/users/plan', { username, plan: select.value });
+  if (result.success) loadUsers();
+}
+
+async function resetUserPassword(username) {
+  const input = document.getElementById(`pwd-${username}`);
+  const password = input?.value || '';
+  if (password.length < 4) { alert('Digite uma senha com pelo menos 4 caracteres.'); return; }
+  const result = await postJSON('/api/users/password', { username, password });
+  if (result.success) {
+    alert(`Senha de "${username}" atualizada.`);
+    if (input) input.value = '';
+  }
+}
+
+async function deleteUser(username) {
+  if (!confirm(`Excluir o usuário "${username}"? As contas Steam dele continuam no painel, mas sem dono.`)) return;
+  const result = await postJSON('/api/users/delete', { username });
+  if (result.success) loadUsers();
+}
+
+loadMe();

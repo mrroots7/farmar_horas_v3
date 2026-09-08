@@ -19,7 +19,8 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <div class="pill"><span class="dot"></span> Sistema ativo</div>
+        <div class="pill" id="userBadge"><span class="dot"></span> Carregando...</div>
+        <button class="btn-sm btn-ghost" onclick="openAccountModal()">Minha conta</button>
         <button class="btn-sm btn-danger" onclick="logout()">Sair</button>
       </div>
     </header>
@@ -27,9 +28,11 @@
     <div class="tabs">
       <button class="tab active" onclick="showTab('dash', this)">Dashboard</button>
       <button class="tab" onclick="showTab('profiles', this)">Perfis</button>
-      <button class="tab" onclick="showTab('webhooks', this)">Webhooks</button>
-      <button class="tab" onclick="showTab('api', this)">API</button>
-      <button class="tab" onclick="showTab('importexport', this)">Importar/Exportar</button>
+      <button class="tab hidden" id="tabBtn-bans" onclick="showTab('bans', this)">Bans</button>
+      <button class="tab" id="tabBtn-webhooks" onclick="showTab('webhooks', this)">Webhooks</button>
+      <button class="tab" id="tabBtn-api" onclick="showTab('api', this)">API</button>
+      <button class="tab" id="tabBtn-importexport" onclick="showTab('importexport', this)">Importar/Exportar</button>
+      <button class="tab hidden" id="tabBtn-users" onclick="showTab('users', this)">Usuários</button>
     </div>
 
     <div id="tab-dash">
@@ -44,6 +47,7 @@
       <div class="grid">
         <section class="card">
           <h2>Nova conta</h2>
+          <p class="hint" id="planUsageInfo"></p>
           <form id="addForm">
             <div class="form-group">
               <label>Usuário Steam</label>
@@ -54,8 +58,24 @@
               <input id="password" type="password" required autocomplete="current-password">
             </div>
             <div class="form-group">
-              <label>AppIDs (ex: 730, 570)</label>
-              <input id="games" value="730">
+              <label>Jogos para farmar</label>
+              <div class="game-picker">
+                <div class="game-picker-search">
+                  <input id="gameSearchInput" placeholder="Buscar jogo pelo nome (ex: Counter-Strike)" autocomplete="off">
+                  <span id="gameSearchSpinner" class="mini-spinner hidden"></span>
+                </div>
+                <div id="gameSearchResults" class="game-search-results hidden"></div>
+                <div id="selectedGames" class="selected-games"></div>
+                <p class="hint">Busque pelo nome e clique no jogo certo (confira a capa) — ou informe o AppID manualmente.</p>
+                <details class="manual-appid">
+                  <summary>Prefiro digitar o AppID manualmente</summary>
+                  <div class="inbound-row" style="margin-top:8px;">
+                    <input id="manualAppId" placeholder="Ex: 730">
+                    <button type="button" class="btn-sm btn-ghost" onclick="addManualAppId()">Add</button>
+                  </div>
+                </details>
+              </div>
+              <input type="hidden" id="games" value="730">
             </div>
             <button class="btn btn-primary" type="submit">Adicionar conta</button>
           </form>
@@ -90,7 +110,7 @@
     </div>
 
     <div id="tab-profiles" class="hidden">
-      <section class="card steam-key-card">
+      <section class="card steam-key-card" id="steamKeyCard">
         <h2>Steam Web API</h2>
         <p class="hint">
           Necessária para carregar a "Página de perfil" (nível, avatar, jogo atual etc.). Gere a sua
@@ -104,6 +124,46 @@
       </section>
 
       <div id="profilesContainer"></div>
+    </div>
+
+    <div id="tab-bans" class="hidden">
+      <section class="card about-card">
+        <h2>Bans (VAC/Game Ban) &amp; Faceit</h2>
+        <p class="about-line">Consulta pública da Steam: VAC Ban, Game Ban (inclui bans do Overwatch/anti-cheat do CS2), Community Ban e Economy Ban.</p>
+        <p class="about-line">Para contas com CS2 (AppID 730) entre os jogos, também mostra se existe conta Faceit vinculada (nível/elo).</p>
+        <p class="about-line hint">A Steam não libera publicamente dado de "GC ban"/trust factor pra terceiros — só o que aparece acima.</p>
+      </section>
+
+      <section class="card steam-key-card">
+        <h2>Faceit API Key</h2>
+        <p class="hint">
+          Necessária só pra checar Faceit. Crie um app em
+          <a href="https://developers.faceit.com/" target="_blank" rel="noopener">developers.faceit.com</a> e cole aqui a
+          "Server-side API key".
+        </p>
+        <div class="inbound-row">
+          <input id="faceitKeyInput" placeholder="Cole aqui sua Faceit API Key" type="password">
+          <button class="btn-sm btn-primary" onclick="saveFaceitKey()">Salvar</button>
+        </div>
+        <div id="faceitKeyMessage"></div>
+      </section>
+
+      <section class="card">
+        <h2>Contas</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Conta</th>
+                <th>SteamID</th>
+                <th>CS2</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="bansTable"></tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <div id="tab-webhooks" class="hidden">
@@ -266,6 +326,87 @@
 }</pre>
       </section>
     </div>
+
+    <div id="tab-users" class="hidden">
+      <section class="card about-card">
+        <h2>Usuários &amp; planos</h2>
+        <p class="about-line"><strong>Bronze:</strong> até 2 contas Steam, 3 jogos por conta.</p>
+        <p class="about-line"><strong>Prata:</strong> até 5 contas Steam, 6 jogos por conta.</p>
+        <p class="about-line"><strong>Ouro:</strong> até 15 contas Steam, 12 jogos por conta.</p>
+        <p class="about-line"><strong>Admin:</strong> sem limite, gerencia usuários e vê todas as contas do painel.</p>
+      </section>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Criar usuário</h2>
+          <form id="userForm">
+            <div class="form-group">
+              <label>Usuário</label>
+              <input id="newUserUsername" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label>Senha</label>
+              <input id="newUserPassword" type="password" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label>Função</label>
+              <select id="newUserRole">
+                <option value="user">Usuário</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Plano</label>
+              <select id="newUserPlan">
+                <option value="bronze">Bronze</option>
+                <option value="prata">Prata</option>
+                <option value="ouro">Ouro</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" type="submit">Criar usuário</button>
+          </form>
+          <div id="userMessage"></div>
+        </section>
+
+        <section class="card">
+          <h2>Usuários cadastrados</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Usuário</th>
+                  <th>Função</th>
+                  <th>Plano</th>
+                  <th>Criado em</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="usersTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: minha conta (trocar a própria senha) -->
+  <div id="accountModalOverlay" class="steam-modal-overlay hidden" onclick="if(event.target===this) closeAccountModal()">
+    <div class="steam-modal guard-modal">
+      <button class="steam-modal-close" onclick="closeAccountModal()">&times;</button>
+      <div class="logo login-logo" style="margin:0 auto 14px;">SF</div>
+      <h1 class="login-title" style="text-align:center;">Minha conta</h1>
+      <p class="login-sub" id="accountModalSub" style="text-align:center;">—</p>
+
+      <form id="accountPasswordForm">
+        <div class="form-group">
+          <label>Nova senha</label>
+          <input id="accountNewPassword" type="password" required autocomplete="new-password" minlength="4">
+        </div>
+        <button class="btn btn-primary" type="submit">Trocar senha</button>
+      </form>
+
+      <div id="accountModalMessage"></div>
+    </div>
   </div>
 
   <!-- Modal: página de perfil no estilo Steam -->
@@ -273,6 +414,31 @@
     <div class="steam-modal">
       <button class="steam-modal-close" onclick="closeSteamProfile()">&times;</button>
       <div id="steamModalBody">Carregando...</div>
+    </div>
+  </div>
+
+  <!-- Modal: código Steam Guard (mesma caixa/estilo do login) -->
+  <div id="guardModalOverlay" class="steam-modal-overlay hidden">
+    <div class="steam-modal guard-modal">
+      <button class="steam-modal-close" onclick="closeGuardModal()">&times;</button>
+      <div class="logo login-logo" style="margin:0 auto 14px;">SF</div>
+      <h1 class="login-title" style="text-align:center;">Steam Guard</h1>
+      <p class="login-sub" id="guardModalSub" style="text-align:center;">Aguardando código...</p>
+
+      <form id="guardForm">
+        <div class="form-group">
+          <label>Código recebido</label>
+          <input id="guardCodeInput" autocomplete="one-time-code" maxlength="8" placeholder="Ex: ABC12">
+        </div>
+        <button class="btn btn-primary" type="submit" id="guardSubmitBtn">Confirmar código</button>
+      </form>
+
+      <div id="guardWaiting" class="guard-waiting hidden">
+        <div class="spinner"></div>
+        <p>Confirmando com a Steam, aguarde...</p>
+      </div>
+
+      <div id="guardMessage"></div>
     </div>
   </div>
 

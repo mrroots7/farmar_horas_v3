@@ -1,3 +1,24 @@
+# Steam Hours Farmer — Novidades v4.1
+
+## Nova aba "Bans" (VAC/Game Ban + Faceit) — só admin
+Nova aba **Bans**, visível apenas para o usuário `admin` (igual Webhooks/API/Importar-Exportar).
+Lista todas as contas com SteamID já conhecido e, ao clicar em **Consultar**, mostra:
+- **VAC Ban** (sim/não + quantidade)
+- **Game Ban** (inclui os bans de anti-cheat/Overwatch do CS2)
+- **Community Ban** e **Economy Ban**
+- **Faceit**, só para contas que têm CS2 (AppID 730) entre os jogos: se tem conta vinculada,
+  nível e elo; se não tem, aparece "Sem conta vinculada".
+
+Usa a mesma **Steam Web API Key** já configurada na aba Perfis (endpoint `GetPlayerBans`).
+Para o Faceit, configure uma **Faceit API Key** própria (Server-side API key, gerada em
+https://developers.faceit.com/) no card no topo da aba Bans.
+
+**Importante:** a Steam não libera publicamente nenhum dado de "GC ban"/trust factor do CS2 para
+terceiros — o endpoint público só devolve VAC Ban, Game Ban, Community Ban e Economy Ban, que é
+exatamente o que essa aba mostra.
+
+---
+
 # Steam Hours Farmer — Novidades v3.4
 
 ## Resumo desta versão

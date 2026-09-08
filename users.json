@@ -1,0 +1,10 @@
+[
+  {
+    "id": "67494cba02a09f88",
+    "username": "admin",
+    "passwordHash": "39db53472ac767acc7ab21f7044e058c:0f51e86d56f61515fbf35b58e8e756ac3f098a4095827d258aa04502229dd025b3b2ae83fc5f3f16d4e6a5aa394b7eaf5e2ea0ffcedcf7a149927746dcb86414",
+    "role": "admin",
+    "plan": "ouro",
+    "createdAt": 1788848413330
+  }
+]

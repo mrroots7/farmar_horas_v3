@@ -1,58 +1,26 @@
 [
   {
-    "id": "mts3eil30nvwv",
-    "timestamp": 1788837066903,
-    "evento": "CONTA_ERRO",
-    "mensagem": "Falha: Sessão inválida, tente novamente (código 6)",
-    "username": "nyxx346",
+    "id": "mtsbbf1n4961k",
+    "timestamp": 1788850359275,
+    "evento": "CONTA_ADICIONADA",
+    "mensagem": "Conta cadastrada com AppIDs: 730",
+    "username": "ljvzvupfqobyhvb38",
     "channel": "dashboard"
   },
   {
-    "id": "mts3eiuuux3os",
-    "timestamp": 1788837067254,
+    "id": "mtsbbl61anke4",
+    "timestamp": 1788850367209,
     "evento": "CONTA_ONLINE",
-    "mensagem": "Online e farmando 2 jogo(s): Counter-Strike 2, Once Human",
-    "username": "nyxx346",
+    "mensagem": "Online e farmando 1 jogo(s): Counter-Strike 2",
+    "username": "ljvzvupfqobyhvb38",
     "channel": "dashboard"
   },
   {
-    "id": "mts3elokkcbqi",
-    "timestamp": 1788837070916,
-    "evento": "CONTA_DESCONECTADA",
-    "mensagem": "Conta desconectada.",
-    "username": "nyxx346",
-    "channel": "dashboard"
-  },
-  {
-    "id": "mts3iex5oexx5",
-    "timestamp": 1788837248777,
+    "id": "mtsbbvv125h3d",
+    "timestamp": 1788850381069,
     "evento": "STEAM_API_KEY",
     "mensagem": "Steam Web API Key atualizada.",
     "username": null,
-    "channel": "dashboard"
-  },
-  {
-    "id": "mts3j3q2jsbnk",
-    "timestamp": 1788837280923,
-    "evento": "CONTA_ADICIONADA",
-    "mensagem": "Conta cadastrada com AppIDs: 730",
-    "username": "willmarley07",
-    "channel": "dashboard"
-  },
-  {
-    "id": "mts3jb5py801i",
-    "timestamp": 1788837290557,
-    "evento": "CONTA_ERRO",
-    "mensagem": "Falha: Muitas tentativas de login seguidas (rate limit). Aguarde alguns minutos (código 84)",
-    "username": "willmarley07",
-    "channel": "dashboard"
-  },
-  {
-    "id": "mts3jfqgzq6iq",
-    "timestamp": 1788837296488,
-    "evento": "CONTA_EXCLUIDA",
-    "mensagem": "Conta removida do painel.",
-    "username": "willmarley07",
     "channel": "dashboard"
   }
 ]

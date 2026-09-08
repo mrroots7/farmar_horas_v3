@@ -14,6 +14,7 @@ const io = new Server(server);
 const PORT = 3000;
 const ACCOUNTS_FILE = path.join(__dirname, 'accounts.json');
 const AUTH_FILE = path.join(__dirname, 'auth.json');
+const USERS_FILE = path.join(__dirname, 'users.json');
 const SESSION_SECRET_FILE = path.join(__dirname, 'session-secret.json');
 const WEBHOOKS_FILE = path.join(__dirname, 'webhooks.json');
 const DASHBOARD_LOGS_FILE = path.join(__dirname, 'logs-dashboard.json');
@@ -22,10 +23,23 @@ const INBOUND_EVENTS_FILE = path.join(__dirname, 'inbound-events.json');
 const INBOUND_FILE = path.join(__dirname, 'inbound.json');
 const API_CONFIG_FILE = path.join(__dirname, 'api-config.json');
 const STEAM_KEY_FILE = path.join(__dirname, 'steam-api-key.json');
+const FACEIT_KEY_FILE = path.join(__dirname, 'faceit-api-key.json');
 const WEBHOOK_TYPES = ['discord', 'telegram', 'whatsapp', 'sage', 'custom'];
 const STEAM_GUARD_TIMEOUT_MS = 5 * 60 * 1000; // 5 min pra digitar o código antes de desistir
 const MAX_LOGS = 500;
 const MAX_INBOUND_EVENTS = 500;
+
+// ======================
+// PLANOS (multiusuário)
+// ======================
+const PLANS = {
+  bronze: { name: 'Bronze', maxAccounts: 2, maxGames: 3 },
+  prata: { name: 'Prata', maxAccounts: 5, maxGames: 6 },
+  ouro: { name: 'Ouro', maxAccounts: 15, maxGames: 12 }
+};
+function getPlan(planKey) {
+  return PLANS[planKey] || PLANS.bronze;
+}
 
 let accounts = [];
 let webhooks = [];
@@ -105,9 +119,21 @@ function ensureStatus(username, partial = {}) {
   Object.assign(statusContas[username], partial);
 }
 
+// Filtra o statusContas (chaveado por conta Steam) pras contas de um dono específico.
+function statusParaDono(ownerUsername) {
+  const minhas = accounts.filter(a => a.owner === ownerUsername).map(a => a.username);
+  const out = {};
+  minhas.forEach(u => { if (statusContas[u]) out[u] = statusContas[u]; });
+  return out;
+}
+
 function emitAll(reason = 'update') {
   log('SOCKET', `emit update_all (${reason})`);
-  io.emit('update_all', statusContas);
+  for (const socket of io.of('/').sockets.values()) {
+    const sess = socket.request.session;
+    if (!sess) continue;
+    socket.emit('update_all', sess.role === 'admin' ? statusContas : statusParaDono(sess.username));
+  }
 }
 
 async function getGameName(appId) {
@@ -200,6 +226,96 @@ async function buscarPerfilSteam(steamID) {
   }
 }
 
+// ======================
+// BANS (VAC/Game Ban) + FACEIT — usados na aba "Bans" do painel
+// ======================
+function loadFaceitApiKey() {
+  try {
+    return JSON.parse(fs.readFileSync(FACEIT_KEY_FILE, 'utf8')).key || '';
+  } catch {
+    return '';
+  }
+}
+
+function saveFaceitApiKey(key) {
+  fs.writeFileSync(FACEIT_KEY_FILE, JSON.stringify({ key: key || '' }, null, 2));
+}
+
+// A Steam não libera publicamente nenhum dado de "GC ban"/trust factor do
+// CS2 pra terceiros — só o que a GetPlayerBans devolve: VAC Ban, Game Ban
+// (que inclui os bans do Overwatch/anti-cheat), Community Ban e Economy Ban.
+async function buscarBansSteam(steamID) {
+  const key = loadSteamApiKey();
+  if (!key) {
+    return { ok: false, message: 'Nenhuma Steam Web API Key configurada (mesma chave usada em "Ver perfil Steam").' };
+  }
+  if (!steamID) {
+    return { ok: false, message: 'Essa conta ainda não tem um SteamID (faça login nela ao menos uma vez).' };
+  }
+
+  try {
+    const res = await fetch(`https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key=${key}&steamids=${steamID}`);
+    const data = await res.json().catch(() => ({}));
+    const p = data?.players?.[0];
+    if (!p) return { ok: false, message: 'Steam não retornou dados de ban para esse SteamID.' };
+
+    return {
+      ok: true,
+      bans: {
+        vacBanned: !!p.VACBanned,
+        numeroVacBans: p.NumberOfVACBans ?? 0,
+        diasDesdeUltimoBan: p.DaysSinceLastBan ?? null,
+        numeroGameBans: p.NumberOfGameBans ?? 0,
+        communityBanned: !!p.CommunityBanned,
+        economyBan: p.EconomyBan && p.EconomyBan !== 'none' ? p.EconomyBan : null
+      }
+    };
+  } catch (err) {
+    return { ok: false, message: `Erro ao consultar bans na Steam: ${err.message}` };
+  }
+}
+
+// Verifica se a conta tem Faceit vinculado (só faz sentido pra contas com
+// CS2 — appid 730 — entre os jogos farmados).
+async function buscarFaceit(steamID) {
+  const key = loadFaceitApiKey();
+  if (!key) {
+    return { ok: false, message: 'Nenhuma Faceit API Key configurada. Gere uma em https://developers.faceit.com/ e salve no painel.' };
+  }
+  if (!steamID) {
+    return { ok: false, message: 'Essa conta ainda não tem um SteamID.' };
+  }
+
+  try {
+    const res = await fetch(`https://open.faceit.com/data/v4/players?game=cs2&game_player_id=${steamID}`, {
+      headers: { Authorization: `Bearer ${key}` }
+    });
+
+    if (res.status === 404) {
+      return { ok: true, faceit: { temFaceit: false } };
+    }
+    if (!res.ok) {
+      return { ok: false, message: `Faceit respondeu com erro HTTP ${res.status}.` };
+    }
+
+    const data = await res.json().catch(() => ({}));
+    const cs2 = data?.games?.cs2;
+
+    return {
+      ok: true,
+      faceit: {
+        temFaceit: true,
+        nickname: data.nickname || null,
+        faceitUrl: data.faceit_url ? data.faceit_url.replace('{lang}', 'en') : null,
+        nivel: cs2?.skill_level ?? null,
+        elo: cs2?.faceit_elo ?? null
+      }
+    };
+  } catch (err) {
+    return { ok: false, message: `Erro ao consultar a Faceit: ${err.message}` };
+  }
+}
+
 async function buildActiveGames(appIds, keepMap = {}) {
   const now = Date.now();
   const list = [];
@@ -230,6 +346,13 @@ function carregarContas() {
 
     if (!acc.createdAt) {
       acc.createdAt = Date.now();
+      precisaSalvar = true;
+    }
+
+    // Contas de antes do sistema multiusuário não tinham "owner" — ficam do admin.
+    if (!acc.owner) {
+      const admin = users.find(u => u.role === 'admin');
+      acc.owner = admin ? admin.username : 'admin';
       precisaSalvar = true;
     }
 
@@ -282,6 +405,73 @@ function loadAuth() {
     log('AUTH', '⚠ TROQUE AGORA rodando: node set-password.js <usuario> <senha>');
     return def;
   }
+}
+
+// ======================
+// MULTIUSUÁRIO (users.json)
+// ======================
+let users = [];
+
+function salvarUsers() {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+// Se users.json não existir, migra o login antigo do auth.json (se existir) pro
+// primeiro usuário admin/ouro. Se nem auth.json existir, cria admin/admin123.
+function carregarUsers() {
+  try {
+    users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    if (!Array.isArray(users) || !users.length) throw new Error('vazio');
+    return;
+  } catch {
+    // sem users.json ainda — migra
+  }
+
+  let migrado;
+  try {
+    const old = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
+    migrado = { username: old.username, passwordHash: old.passwordHash };
+    log('AUTH', `Migração: usuário "${old.username}" do auth.json virou admin/ouro em users.json.`);
+  } catch {
+    migrado = { username: 'admin', passwordHash: hashPassword('admin123') };
+    log('AUTH', '⚠ users.json criado com login padrão (usuário: admin / senha: admin123).');
+    log('AUTH', '⚠ TROQUE AGORA rodando: node set-password.js admin <senha>');
+  }
+
+  users = [{
+    id: crypto.randomBytes(8).toString('hex'),
+    username: migrado.username,
+    passwordHash: migrado.passwordHash,
+    role: 'admin',
+    plan: 'ouro',
+    createdAt: Date.now()
+  }];
+  salvarUsers();
+}
+
+function findUser(username) {
+  return users.find(u => u.username === username);
+}
+
+function userPublico(u) {
+  return {
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    plan: u.plan,
+    planName: getPlan(u.plan).name,
+    createdAt: u.createdAt
+  };
+}
+
+function requireAdmin(req, res, next) {
+  if (req.session?.role === 'admin') return next();
+  return res.status(403).json({ success: false, message: 'Apenas o administrador pode fazer isso.' });
+}
+
+// Um usuário comum só pode ver/mexer nas próprias contas Steam; o admin vê tudo.
+function podeAcessarConta(req, acc) {
+  return req.session?.role === 'admin' || acc.owner === req.session?.username;
 }
 
 function loadSessionSecret() {
@@ -571,13 +761,14 @@ async function dispararWebhooks(evento, mensagem, username = null, channel = 'da
   }
 }
 
+carregarUsers();
 carregarContas();
 carregarWebhooks();
 carregarLogs();
 carregarInboundEvents();
 let inboundConfig = carregarInbound();
 let apiConfig = carregarApiConfig();
-const authConfig = loadAuth();
+const authConfig = users[0] || loadAuth();
 
 app.use(express.json());
 app.use(sessionMiddleware);
@@ -594,17 +785,105 @@ app.use((req, res, next) => {
 // ======================
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
-  const auth = loadAuth(); // relê do disco (permite trocar senha via set-password.js sem reiniciar)
+  const user = findUser(username);
 
-  if (username === auth.username && verifyPassword(password, auth.passwordHash)) {
+  if (user && verifyPassword(password, user.passwordHash)) {
     req.session.loggedIn = true;
-    req.session.username = username;
-    log('AUTH', `Login bem-sucedido: ${username}`);
-    return res.json({ success: true });
+    req.session.username = user.username;
+    req.session.role = user.role;
+    req.session.plan = user.plan;
+    log('AUTH', `Login bem-sucedido: ${username} (${user.role}/${user.plan})`);
+    return res.json({ success: true, user: userPublico(user) });
   }
 
   log('AUTH', `Tentativa de login falhou para usuário "${username}"`);
   return res.status(401).json({ success: false, message: 'Usuário ou senha inválidos.' });
+});
+
+// Dados do usuário logado + limites do plano (front usa pra saber o que mostrar)
+app.get('/api/me', (req, res) => {
+  const user = findUser(req.session.username);
+  if (!user) return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+  const plan = getPlan(user.plan);
+  const usados = accounts.filter(a => a.owner === user.username).length;
+  res.json({
+    success: true,
+    user: userPublico(user),
+    limits: { maxAccounts: plan.maxAccounts, maxGames: plan.maxGames, contasUsadas: usados }
+  });
+});
+
+// ======================
+// ROTAS - USUÁRIOS (só admin)
+// ======================
+app.get('/api/users', requireAdmin, (req, res) => {
+  res.json({ success: true, users: users.map(userPublico) });
+});
+
+app.post('/api/users', requireAdmin, (req, res) => {
+  try {
+    const { username, password, role, plan } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Usuário e senha obrigatórios.' });
+    }
+    if (findUser(username)) {
+      return res.status(400).json({ success: false, message: 'Já existe um usuário com esse nome.' });
+    }
+    const rolefinal = role === 'admin' ? 'admin' : 'user';
+    const planFinal = PLANS[plan] ? plan : 'bronze';
+
+    const novo = {
+      id: crypto.randomBytes(8).toString('hex'),
+      username,
+      passwordHash: hashPassword(password),
+      role: rolefinal,
+      plan: planFinal,
+      createdAt: Date.now()
+    };
+    users.push(novo);
+    salvarUsers();
+    log('AUTH', `Usuário criado: ${username} (${rolefinal}/${planFinal})`);
+    res.json({ success: true, message: 'Usuário criado!', user: userPublico(novo) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Erro interno.' });
+  }
+});
+
+app.post('/api/users/plan', requireAdmin, (req, res) => {
+  const { username, plan } = req.body || {};
+  const user = findUser(username);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+  if (!PLANS[plan]) return res.status(400).json({ success: false, message: 'Plano inválido.' });
+  user.plan = plan;
+  salvarUsers();
+  res.json({ success: true, message: `Plano de "${username}" alterado para ${getPlan(plan).name}.` });
+});
+
+app.post('/api/users/password', (req, res) => {
+  // Admin pode trocar a senha de qualquer um (informando "username"); sem
+  // informar, ou se for usuário comum, a troca é sempre da própria conta.
+  const { username, password } = req.body || {};
+  const alvo = (req.session.role === 'admin' && username) ? username : req.session.username;
+  const user = findUser(alvo);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+  if (!password || password.length < 4) {
+    return res.status(400).json({ success: false, message: 'Senha muito curta.' });
+  }
+  user.passwordHash = hashPassword(password);
+  salvarUsers();
+  res.json({ success: true, message: 'Senha atualizada.' });
+});
+
+app.post('/api/users/delete', requireAdmin, (req, res) => {
+  const { username } = req.body || {};
+  const user = findUser(username);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+  if (user.role === 'admin' && users.filter(u => u.role === 'admin').length <= 1) {
+    return res.status(400).json({ success: false, message: 'Não é possível remover o único admin.' });
+  }
+  users = users.filter(u => u.username !== username);
+  salvarUsers();
+  res.json({ success: true, message: 'Usuário removido (as contas Steam dele continuam existindo, agora órfãs).' });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -630,8 +909,21 @@ app.post('/api/add-account', async (req, res) => {
     const valid = validarAppIds(gamesArray);
     if (!valid.ok) return res.status(400).json({ success: false, message: valid.message });
 
+    // Limites do plano do usuário logado (admin não tem limite)
+    const owner = req.session.username;
+    if (req.session.role !== 'admin') {
+      const plan = getPlan(req.session.plan);
+      const minhasContas = accounts.filter(a => a.owner === owner).length;
+      if (minhasContas >= plan.maxAccounts) {
+        return res.status(403).json({ success: false, message: `Seu plano (${plan.name}) permite no máximo ${plan.maxAccounts} conta(s). Faça upgrade pra adicionar mais.` });
+      }
+      if (gamesArray.length > plan.maxGames) {
+        return res.status(403).json({ success: false, message: `Seu plano (${plan.name}) permite no máximo ${plan.maxGames} jogo(s) por conta.` });
+      }
+    }
+
     const createdAt = Date.now();
-    accounts.push({ username, password, games: gamesArray, createdAt });
+    accounts.push({ username, password, games: gamesArray, createdAt, owner });
     salvarContas();
 
     ensureStatus(username, {
@@ -660,6 +952,10 @@ app.post('/api/delete-account', (req, res) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ success: false, message: 'Username obrigatório.' });
 
+    const accAlvo = accounts.find(a => a.username === username);
+    if (!accAlvo) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    if (!podeAcessarConta(req, accAlvo)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
+
     if (clients[username]) {
       try { clients[username].logOff(); } catch { }
       delete clients[username];
@@ -685,12 +981,20 @@ app.post('/api/add-games', async (req, res) => {
 
     const acc = accounts.find(a => a.username === username);
     if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    if (!podeAcessarConta(req, acc)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
 
     const novos = normalizarAppIds(games);
     const valid = validarAppIds(novos);
     if (!valid.ok) return res.status(400).json({ success: false, message: valid.message });
 
-    acc.games = normalizarAppIds([...(acc.games || []), ...novos]);
+    const combinados = normalizarAppIds([...(acc.games || []), ...novos]);
+    if (req.session.role !== 'admin') {
+      const plan = getPlan(req.session.plan);
+      if (combinados.length > plan.maxGames) {
+        return res.status(403).json({ success: false, message: `Seu plano (${plan.name}) permite no máximo ${plan.maxGames} jogo(s) por conta.` });
+      }
+    }
+    acc.games = combinados;
     salvarContas();
     ensureStatus(username, { games: acc.games });
 
@@ -727,6 +1031,7 @@ app.post('/api/stop-game', async (req, res) => {
 
     const acc = accounts.find(a => a.username === username);
     if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    if (!podeAcessarConta(req, acc)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
 
     const id = Number(appId);
     acc.games = (acc.games || []).filter(g => g !== id);
@@ -766,6 +1071,9 @@ app.post('/api/stop-account', (req, res) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ success: false, message: 'Username obrigatório.' });
 
+    const accAlvoStop = accounts.find(a => a.username === username);
+    if (accAlvoStop && !podeAcessarConta(req, accAlvoStop)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
+
     if (clients[username]) {
       try {
         clients[username].gamesPlayed([]);
@@ -795,6 +1103,7 @@ app.post('/api/start-account', (req, res) => {
     const { username } = req.body;
     const acc = accounts.find(a => a.username === username);
     if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    if (!podeAcessarConta(req, acc)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
     if (clients[username]) return res.json({ success: false, message: 'Conta já está rodando.' });
 
     iniciarConta(acc.username, acc.password, acc.games || [730]);
@@ -807,13 +1116,13 @@ app.post('/api/start-account', (req, res) => {
 // ======================
 // ROTAS - WEBHOOKS
 // ======================
-app.get('/api/webhooks', (req, res) => {
+app.get('/api/webhooks', requireAdmin, (req, res) => {
   res.json({ success: true, webhooks, logs: webhooksLog.slice(-100).reverse() });
 });
 
 // Igual ao "adicionar conta", só que aqui é pra webhooks: escolha quantos quiser,
 // separando Discord de SAGE pelo campo "type".
-app.post('/api/add-webhook', (req, res) => {
+app.post('/api/add-webhook', requireAdmin, (req, res) => {
   try {
     const { name, type, url, extra } = req.body || {};
     if (!name || !type || !url) {
@@ -856,7 +1165,7 @@ app.post('/api/add-webhook', (req, res) => {
   }
 });
 
-app.post('/api/delete-webhook', (req, res) => {
+app.post('/api/delete-webhook', requireAdmin, (req, res) => {
   try {
     const { id } = req.body || {};
     const wh = webhooks.find(w => w.id === id);
@@ -871,7 +1180,7 @@ app.post('/api/delete-webhook', (req, res) => {
 });
 
 // Envia uma mensagem de teste pro webhook na hora, sem depender de nenhum evento real acontecer.
-app.post('/api/test-webhook', async (req, res) => {
+app.post('/api/test-webhook', requireAdmin, async (req, res) => {
   try {
     const { id } = req.body || {};
     const wh = webhooks.find(w => w.id === id);
@@ -892,7 +1201,7 @@ app.post('/api/test-webhook', async (req, res) => {
   }
 });
 
-app.post('/api/toggle-webhook', (req, res) => {
+app.post('/api/toggle-webhook', requireAdmin, (req, res) => {
   try {
     const { id, active } = req.body || {};
     const wh = webhooks.find(w => w.id === id);
@@ -911,13 +1220,13 @@ app.post('/api/toggle-webhook', (req, res) => {
 // ======================
 // ROTAS - PERFIL STEAM (Steam Web API)
 // ======================
-app.get('/api/steam-key', (req, res) => {
+app.get('/api/steam-key', requireAdmin, (req, res) => {
   const key = loadSteamApiKey();
   // nunca devolve a chave inteira pro front, só se está configurada e os últimos 4 caracteres
   res.json({ success: true, configured: !!key, hint: key ? `••••••••${key.slice(-4)}` : null });
 });
 
-app.post('/api/steam-key', (req, res) => {
+app.post('/api/steam-key', requireAdmin, (req, res) => {
   const { key } = req.body || {};
   if (!key || typeof key !== 'string' || key.trim().length < 10) {
     return res.status(400).json({ success: false, message: 'Chave inválida. Cole a Steam Web API Key completa.' });
@@ -925,6 +1234,34 @@ app.post('/api/steam-key', (req, res) => {
   saveSteamApiKey(key.trim());
   addLog('STEAM_API_KEY', 'Steam Web API Key atualizada.', null, 'dashboard');
   res.json({ success: true, message: 'Chave salva!' });
+});
+
+// Busca jogos pelo nome (usada no formulário de "Nova conta"/"Adicionar jogo")
+// pra você não precisar decorar/procurar o AppID na mão. Usa a busca pública
+// da própria loja da Steam (não precisa de API key nem de login na Steam).
+app.get('/api/steam/search-game', async (req, res) => {
+  const term = String(req.query.q || '').trim();
+  if (term.length < 2) return res.json({ success: true, items: [] });
+
+  try {
+    const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Steam respondeu ${r.status}`);
+    const raw = await r.json().catch(() => ({}));
+
+    const items = (raw.items || [])
+      .filter(it => it && it.id)
+      .slice(0, 10)
+      .map(it => ({
+        appId: it.id,
+        name: it.name,
+        image: it.tiny_image || null
+      }));
+
+    res.json({ success: true, items });
+  } catch (err) {
+    res.status(500).json({ success: false, message: `Erro ao buscar na Steam: ${err.message}` });
+  }
 });
 
 app.get('/api/steam-profile/:username', async (req, res) => {
@@ -937,9 +1274,61 @@ app.get('/api/steam-profile/:username', async (req, res) => {
 });
 
 // ======================
+// ROTAS - BANS (VAC/Game Ban) + FACEIT — só o admin vê essa aba
+// ======================
+app.get('/api/faceit-key', requireAdmin, (req, res) => {
+  const key = loadFaceitApiKey();
+  res.json({ success: true, configured: !!key, hint: key ? `••••••••${key.slice(-4)}` : null });
+});
+
+app.post('/api/faceit-key', requireAdmin, (req, res) => {
+  const { key } = req.body || {};
+  if (!key || typeof key !== 'string' || key.trim().length < 10) {
+    return res.status(400).json({ success: false, message: 'Chave inválida. Cole a Faceit API Key completa (Server-side API key).' });
+  }
+  saveFaceitApiKey(key.trim());
+  addLog('FACEIT_API_KEY', 'Faceit API Key atualizada.', null, 'dashboard');
+  res.json({ success: true, message: 'Chave salva!' });
+});
+
+// Rota única que devolve VAC/Game Ban + (se a conta farma CS2, appid 730)
+// também o status do Faceit. Só admin acessa — os dados de ban ficam na
+// aba "Bans" do painel.
+app.get('/api/steam-bans/:username', requireAdmin, async (req, res) => {
+  const acc = statusContas[req.params.username];
+  if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+
+  const bansResult = await buscarBansSteam(acc.steamID);
+  if (!bansResult.ok) return res.status(400).json(bansResult);
+
+  const temCS2 = Array.isArray(acc.games) && acc.games.includes(730);
+  let faceit = null;
+  let faceitMessage = null;
+
+  if (temCS2) {
+    const faceitResult = await buscarFaceit(acc.steamID);
+    if (faceitResult.ok) {
+      faceit = faceitResult.faceit;
+    } else {
+      faceitMessage = faceitResult.message;
+    }
+  }
+
+  res.json({
+    success: true,
+    username: req.params.username,
+    steamID: acc.steamID,
+    bans: bansResult.bans,
+    temCS2,
+    faceit,
+    faceitMessage
+  });
+});
+
+// ======================
 // ROTAS - EXPORTAR / IMPORTAR CONFIGURAÇÕES
 // ======================
-app.get('/api/export', (req, res) => {
+app.get('/api/export', requireAdmin, (req, res) => {
   const payload = {
     formato: 'farmar-horas-backup-v1',
     exportedAt: Date.now(),
@@ -950,7 +1339,7 @@ app.get('/api/export', (req, res) => {
   res.json(payload);
 });
 
-app.post('/api/import', async (req, res) => {
+app.post('/api/import', requireAdmin, async (req, res) => {
   try {
     const body = req.body || {};
     const contasEntrada = Array.isArray(body.accounts) ? body.accounts : [];
@@ -967,7 +1356,7 @@ app.post('/api/import', async (req, res) => {
 
       const gamesArray = normalizarAppIds(Array.isArray(item.games) && item.games.length ? item.games : [730]);
       const createdAt = Date.now();
-      accounts.push({ username, password, games: gamesArray, createdAt });
+      accounts.push({ username, password, games: gamesArray, createdAt, owner: req.session.username });
       ensureStatus(username, {
         status: 'OFFLINE', tempoFarmando: 0, statusDetalhado: 'Importada',
         games: gamesArray, activeGames: [], startedAt: null, steamID: null, profileUrl: null, createdAt
@@ -1005,15 +1394,27 @@ app.post('/api/import', async (req, res) => {
 // ======================
 // ROTAS - WEBHOOKS DE ENTRADA (o painel recebe eventos de fora)
 // ======================
-app.get('/api/inbound-info', (req, res) => {
+app.get('/api/inbound-info', requireAdmin, (req, res) => {
   res.json({ success: true, url: inboundUrl(req, inboundConfig.token), token: inboundConfig.token });
 });
 
-app.post('/api/inbound-regenerate', (req, res) => {
+app.post('/api/inbound-regenerate', requireAdmin, (req, res) => {
   inboundConfig = { token: gerarToken() };
   salvarInbound(inboundConfig);
   dispararWebhooks('INBOUND_REGERADO', 'O link de recebimento de webhooks foi renovado (o antigo parou de funcionar).', null, 'webhooks');
   res.json({ success: true, url: inboundUrl(req, inboundConfig.token), token: inboundConfig.token });
+});
+
+// Alguns testadores de webhook (inclusive o botão "Test" do SAG Enhanced) fazem
+// uma checagem simples de "a URL existe?" com GET antes de mandar o POST real.
+// Sem essa rota, isso batia em "Cannot GET ..." (404) mesmo com o link certo.
+// Aqui só validamos o token e respondemos OK — não processamos nada, quem
+// processa o evento de verdade continua sendo o POST abaixo.
+app.get('/api/inbound/:token', (req, res) => {
+  if (req.params.token !== inboundConfig.token) {
+    return res.status(403).json({ success: false, message: 'Token inválido.' });
+  }
+  res.json({ success: true, message: 'Endpoint de entrada ativo. Envie um POST com o evento/conta neste mesmo link.' });
 });
 
 // Rota pública (validada pelo token na URL, não por sessão) — é nela que SAGE,
@@ -1064,7 +1465,8 @@ app.post('/api/inbound/:token', async (req, res) => {
     }
 
     const createdAt = Date.now();
-    accounts.push({ username: conta.username, password: conta.password, games: conta.games, createdAt, origem: 'sage' });
+    const donoInbound = (users.find(u => u.role === 'admin') || {}).username || 'admin';
+    accounts.push({ username: conta.username, password: conta.password, games: conta.games, createdAt, origem: 'sage', owner: donoInbound });
     salvarContas();
 
     ensureStatus(conta.username, {
@@ -1109,11 +1511,11 @@ app.post('/api/inbound/:token', async (req, res) => {
 // ROTAS - TOKEN DA API PÚBLICA (protegidas por sessão, é aqui que o dono do
 // painel gerencia o token; quem usa a API de fora usa /api/public/*)
 // ======================
-app.get('/api/api-token', (req, res) => {
+app.get('/api/api-token', requireAdmin, (req, res) => {
   res.json({ success: true, token: apiConfig.token });
 });
 
-app.post('/api/api-token/regenerate', (req, res) => {
+app.post('/api/api-token/regenerate', requireAdmin, (req, res) => {
   apiConfig = { token: gerarToken() };
   salvarApiConfig(apiConfig);
   addLog('API_TOKEN_REGENERADO', 'O token da API pública foi renovado (o antigo parou de funcionar).', null, 'dashboard');
@@ -1176,7 +1578,7 @@ app.get('/api/public/data', verificarApiToken, (req, res) => {
 // ======================
 // channel no body decide qual log é apagado ('dashboard' ou 'webhooks'); sem
 // informar, apaga os dois (compatibilidade com a versão anterior).
-app.post('/api/logs/clear', (req, res) => {
+app.post('/api/logs/clear', requireAdmin, (req, res) => {
   const { channel } = req.body || {};
 
   if (!channel || channel === 'dashboard') {
@@ -1214,15 +1616,26 @@ setInterval(() => {
 }, 1000);
 
 io.on('connection', (socket) => {
-  socket.emit('update_all', statusContas);
-  socket.emit('webhooks_update', webhooks);
-  socket.emit('logs_init_dashboard', dashboardLog.slice(-100).reverse());
-  socket.emit('logs_init_webhooks', webhooksLog.slice(-100).reverse());
+  const sess = socket.request.session;
+  const isAdmin = sess?.role === 'admin';
+
+  socket.emit('update_all', isAdmin ? statusContas : statusParaDono(sess?.username));
+
+  // Webhooks e os dois logs são configuração global do painel — só o admin vê.
+  if (isAdmin) {
+    socket.emit('webhooks_update', webhooks);
+    socket.emit('logs_init_dashboard', dashboardLog.slice(-100).reverse());
+    socket.emit('logs_init_webhooks', webhooksLog.slice(-100).reverse());
+  }
 
   // Recebe o código do Steam Guard digitado no painel web
   socket.on('steamGuard_submit', ({ username, code }) => {
     const pending = steamGuardPending[username];
     if (!pending || pending.answered) return;
+
+    const contaSubmit = accounts.find(a => a.username === username);
+    if (!isAdmin && contaSubmit?.owner !== sess?.username) return; // não é sua conta
+
     pending.answered = true;
     delete steamGuardPending[username];
     log('STEAM', `${username} código Steam Guard recebido via painel`);
@@ -1340,7 +1753,17 @@ function iniciarConta(username, password, games = [730]) {
 
     if (steamGuardPending[username]) steamGuardPending[username].answered = true;
     steamGuardPending[username] = { answered: false, callback: (code) => callback(code) };
-    io.emit('steamGuard_request', { username, domain: domain || null });
+
+    // Só quem é dono da conta (ou o admin) precisa ver o pedido de Steam Guard.
+    const contaGuard = accounts.find(a => a.username === username);
+    const donoGuard = contaGuard?.owner;
+    for (const socket of io.of('/').sockets.values()) {
+      const sess = socket.request.session;
+      if (!sess) continue;
+      if (sess.role === 'admin' || sess.username === donoGuard) {
+        socket.emit('steamGuard_request', { username, domain: domain || null });
+      }
+    }
     log('STEAM', `${username} aguardando Steam Guard (informe no painel web)`);
 
     // Fallback: também aceita digitar direto no terminal, se houver um anexado

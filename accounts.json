@@ -1,12 +1,12 @@
 [
   {
-    "username": "nyxx346",
-    "password": "5mxTM1vybjBNKbp",
+    "username": "ljvzvupfqobyhvb38",
+    "password": "iRANq%w=DY5e",
     "games": [
-      730,
-      2139460
+      730
     ],
-    "createdAt": 1788562259290,
-    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0NjMyODE2MyIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcxMzQ2NjUsICJuYmYiOiAxNzgwMTk3MDY1LCAiaWF0IjogMTc4ODgzNzA2NSwgImp0aSI6ICIwMDAxXzI4QzBGM0Q0XzNDNTkwIiwgIm9hdCI6IDE3ODg4MzcwNjUsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.DEpf34Cgh2OkLZ4pDaMKXSaSSFm_Aoi-E35y68ksLSNc7i5-6_Ugm30PCXQUQ8TtIL06EfEruCB0hj4zII1fDQ"
+    "createdAt": 1788850359273,
+    "owner": "admin",
+    "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5ODY0NDkxMjYyMSIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MDcwOTI1MDMsICJuYmYiOiAxNzgwMjEwMzY1LCAiaWF0IjogMTc4ODg1MDM2NSwgImp0aSI6ICIwMDE0XzI4QzBGM0Q3X0FEQUY1IiwgIm9hdCI6IDE3ODg4NTAzNjUsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODkuNC4xMDcuMTM1IiwgImlwX2NvbmZpcm1lciI6ICIxODkuNC4xMDcuMTM1IiB9.ch3a0QNozZArs1vqecgdP8AjCJTC6HFRrw6P_mesx0ICmvDoFaJWP8FL10v3ByQci9l6vQUJ2gJPJqj4jrljBg"
   }
 ]
