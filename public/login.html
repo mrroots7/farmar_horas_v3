@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Steam Hours Farmer</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="login-body">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="logo login-logo">SF</div>
+      <h1 class="login-title">Steam Hours Farmer</h1>
+      <p class="login-sub">Acesso restrito — informe usuário e senha</p>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Usuário</label>
+          <input id="loginUser" required autocomplete="username" autofocus>
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input id="loginPass" type="password" required autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary" type="submit">Entrar</button>
+      </form>
+      <div id="loginMessage"></div>
+    </div>
+  </div>
+
+  <script src="/login.js"></script>
+</body>
+</html>

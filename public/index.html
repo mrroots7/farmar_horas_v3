@@ -11,21 +11,36 @@
   <div class="wrap">
     <header class="topbar">
       <div class="brand">
+        <div class="brand-glow"></div>
         <div class="logo">SF</div>
         <div>
-          <h1>Steam Hours Farmer</h1>
-          <p>Painel de contas e jogos ativos</p>
+          <h1>STEAM <span>HOURS</span> FARMER</h1>
+          <p>Painel de contas, jogos ativos &amp; integrações</p>
         </div>
       </div>
-      <div class="pill"><span class="dot"></span> Sistema ativo</div>
+      <div class="topbar-actions">
+        <div class="pill"><span class="dot"></span> Sistema ativo</div>
+        <button class="btn-sm btn-danger" onclick="logout()">Sair</button>
+      </div>
     </header>
 
     <div class="tabs">
       <button class="tab active" onclick="showTab('dash', this)">Dashboard</button>
       <button class="tab" onclick="showTab('profiles', this)">Perfis</button>
+      <button class="tab" onclick="showTab('webhooks', this)">Webhooks</button>
+      <button class="tab" onclick="showTab('api', this)">API</button>
+      <button class="tab" onclick="showTab('importexport', this)">Importar/Exportar</button>
     </div>
 
     <div id="tab-dash">
+      <section class="card about-card">
+        <h2>O que é este painel</h2>
+        <p class="about-line"><strong>Farm de horas:</strong> mantém contas Steam logadas "jogando" os jogos que você configurar, 24/7.</p>
+        <p class="about-line"><strong>Tempo real:</strong> status, tempo farmado e jogos ativos de cada conta atualizam sozinhos na tela.</p>
+        <p class="about-line"><strong>Webhooks:</strong> avisa Discord/Telegram/WhatsApp/SAGE quando algo acontece, e também recebe eventos de outros apps.</p>
+        <p class="about-line"><strong>Perfil Steam:</strong> mostra os dados públicos da conta (nível, avatar, jogo atual etc.) direto no painel.</p>
+      </section>
+
       <div class="grid">
         <section class="card">
           <h2>Nova conta</h2>
@@ -64,10 +79,200 @@
           </div>
         </section>
       </div>
+
+      <section class="card activity-card">
+        <div class="activity-head">
+          <h2>Atividade das contas</h2>
+          <button class="btn-sm btn-danger" onclick="clearDashboardActivity()">Apagar tudo</button>
+        </div>
+        <div id="dashboardLog" class="activity-log"></div>
+      </section>
     </div>
 
     <div id="tab-profiles" class="hidden">
+      <section class="card steam-key-card">
+        <h2>Steam Web API</h2>
+        <p class="hint">
+          Necessária para carregar a "Página de perfil" (nível, avatar, jogo atual etc.). Gere a sua
+          gratuitamente em <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener">steamcommunity.com/dev/apikey</a>.
+        </p>
+        <div class="inbound-row">
+          <input id="steamKeyInput" placeholder="Cole aqui sua Steam Web API Key" type="password">
+          <button class="btn-sm btn-primary" onclick="saveSteamKey()">Salvar</button>
+        </div>
+        <div id="steamKeyMessage"></div>
+      </section>
+
       <div id="profilesContainer"></div>
+    </div>
+
+    <div id="tab-webhooks" class="hidden">
+      <section class="card about-card">
+        <h2>Como funcionam os webhooks</h2>
+        <p class="about-line"><strong>Saída:</strong> o painel avisa serviços externos (Discord, Telegram, WhatsApp, SAGE, custom) sempre que algo acontece — conta online, erro, jogo parado etc.</p>
+        <p class="about-line"><strong>Entrada:</strong> outros apps mandam eventos pro seu painel usando o link abaixo — eles aparecem na hora no log de atividade.</p>
+      </section>
+
+      <section class="card inbound-card">
+        <h2>Receber webhooks (entrada)</h2>
+        <p class="hint">
+          Cole este link no campo <strong>"Add Webhook URL"</strong> do SAGE (ou de qualquer outro
+          app/serviço) para que ele envie eventos pro seu painel em tempo real.
+        </p>
+        <div class="inbound-row">
+          <input id="inboundUrl" readonly>
+          <button class="btn-sm btn-ghost" onclick="copyInboundUrl()">Copiar</button>
+          <button class="btn-sm btn-warn" onclick="regenInbound()">Gerar novo link</button>
+        </div>
+        <div id="inboundMessage"></div>
+      </section>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Novo webhook de saída</h2>
+          <form id="webhookForm">
+            <div class="form-group">
+              <label>Nome (escolha você)</label>
+              <input id="whName" required placeholder="Ex: Alerta principal">
+            </div>
+            <div class="form-group">
+              <label>Tipo</label>
+              <select id="whType" onchange="onWhTypeChange()">
+                <option value="discord">Discord</option>
+                <option value="telegram">Telegram</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="sage">SAGE</option>
+                <option value="custom">Custom (URL genérica)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label id="whUrlLabel">URL do Webhook</label>
+              <input id="whUrl" required placeholder="https://discord.com/api/webhooks/...">
+            </div>
+            <div class="form-group hidden" id="whExtraGroup">
+              <label id="whExtraLabel">Chat ID</label>
+              <input id="whExtra" placeholder="">
+            </div>
+            <p class="hint" id="whHint"></p>
+            <button class="btn btn-primary" type="submit">Adicionar webhook</button>
+          </form>
+          <div id="webhookMessage"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-title-row">
+            <h2 style="margin:0; border:0; padding:0;">Webhooks configurados</h2>
+            <label class="check-inline">
+              <input type="checkbox" id="showInactiveChk" onchange="renderWebhooks()">
+              Mostrar desativados
+            </label>
+          </div>
+          <div id="webhooksList"></div>
+        </section>
+      </div>
+
+      <section class="card activity-card">
+        <div class="activity-head">
+          <h2>Atividade em tempo real</h2>
+          <button class="btn-sm btn-danger" onclick="clearActivity()">Apagar tudo</button>
+        </div>
+        <div id="activityLog" class="activity-log"></div>
+      </section>
+    </div>
+
+    <div id="tab-api" class="hidden">
+      <section class="card about-card">
+        <h2>API pública do painel</h2>
+        <p class="about-line"><strong>O que é:</strong> um jeito de terceiros (bots, outros sites) consultarem as contas e os logs deste painel em JSON.</p>
+        <p class="about-line"><strong>Segurança:</strong> todo endpoint exige o token abaixo — sem ele, ninguém acessa nada. A senha das contas Steam nunca é exposta pela API.</p>
+      </section>
+
+      <section class="card">
+        <h2>Seu token de API</h2>
+        <p class="hint">Use este token em <code>?token=</code>, no header <code>X-API-Token</code> ou em <code>Authorization: Bearer</code>.</p>
+        <div class="inbound-row">
+          <input id="apiTokenInput" readonly>
+          <button class="btn-sm btn-ghost" onclick="copyApiToken()">Copiar</button>
+          <button class="btn-sm btn-warn" onclick="regenApiToken()">Gerar novo token</button>
+        </div>
+        <div id="apiTokenMessage"></div>
+      </section>
+
+      <section class="card">
+        <h2>Endpoints disponíveis</h2>
+        <div class="api-endpoints" id="apiEndpointsList"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-title-row">
+          <h2 style="margin:0; border:0; padding:0;">Exemplo de uso</h2>
+          <select id="apiLangSelect" onchange="renderApiExample()">
+            <option value="node">Node.js</option>
+            <option value="fetch">JavaScript (fetch)</option>
+            <option value="python">Python</option>
+            <option value="curl">cURL</option>
+          </select>
+        </div>
+
+        <div class="code-editor">
+          <div class="code-editor-toolbar">
+            <span class="code-editor-lang" id="apiCodeLangTag">Node.js</span>
+            <div class="code-editor-actions">
+              <button class="btn-sm btn-ghost" id="apiEditBtn" onclick="toggleApiEdit()">Editar</button>
+              <button class="btn-sm btn-ghost" onclick="copyApiExample()">Copiar</button>
+            </div>
+          </div>
+          <pre id="apiCodeView" class="code-editor-view"><code id="apiCodeHighlight"></code></pre>
+          <textarea id="apiCodeEdit" class="code-editor-edit hidden" spellcheck="false"></textarea>
+        </div>
+      </section>
+    </div>
+
+    <div id="tab-importexport" class="hidden">
+      <div class="grid">
+        <section class="card">
+          <h2>Exportar configurações</h2>
+          <p class="hint">Baixa um arquivo <code>.json</code> com todas as contas e webhooks cadastrados — use como backup ou pra levar pra outro painel.</p>
+          <button class="btn btn-primary" onclick="exportConfig()">Baixar backup (.json)</button>
+        </section>
+
+        <section class="card">
+          <h2>Importar configurações</h2>
+          <p class="hint">Selecione um arquivo <code>.json</code> no formato abaixo. Contas e webhooks já existentes (mesmo usuário) são ignorados.</p>
+          <div class="form-group">
+            <input type="file" id="importFile" accept="application/json,.json">
+          </div>
+          <button class="btn btn-ok" onclick="importConfig()">Importar arquivo</button>
+          <div id="importMessage"></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>Formato esperado do arquivo .json</h2>
+        <p class="hint">
+          <strong>username</strong> e <strong>password</strong> são o login e senha da Steam, exatamente como
+          usados pra entrar no cliente Steam. <strong>games</strong> é uma lista de AppIDs (números). Em
+          webhooks, <strong>url</strong>/<strong>extra</strong> mudam de sentido conforme o <strong>type</strong>
+          (veja a aba Webhooks: Telegram usa token do bot + chat id, WhatsApp usa número + apikey).
+        </p>
+        <pre class="code-block">{
+  "accounts": [
+    { "username": "meuLoginSteam", "password": "minhaSenhaSteam", "games": [730, 570] }
+  ],
+  "webhooks": [
+    { "name": "Meu Discord", "type": "discord", "url": "https://discord.com/api/webhooks/..." },
+    { "name": "Meu Telegram", "type": "telegram", "url": "TOKEN_DO_BOT", "extra": "CHAT_ID" }
+  ]
+}</pre>
+      </section>
+    </div>
+  </div>
+
+  <!-- Modal: página de perfil no estilo Steam -->
+  <div id="steamModalOverlay" class="steam-modal-overlay hidden" onclick="if(event.target===this) closeSteamProfile()">
+    <div class="steam-modal">
+      <button class="steam-modal-close" onclick="closeSteamProfile()">&times;</button>
+      <div id="steamModalBody">Carregando...</div>
     </div>
   </div>
 

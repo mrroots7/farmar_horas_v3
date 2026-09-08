@@ -1,0 +1,26 @@
+[
+  {
+    "id": "mts3jtwm1aeqn",
+    "timestamp": 1788837314854,
+    "origemIp": "::1",
+    "body": {
+      "id": "76561197960287930",
+      "user": {
+        "username": "yfifynmnkpjitywk19",
+        "password": "@tAsw!4xSpf6"
+      },
+      "email": {
+        "address": "0123456789abcdef@demoemail.com",
+        "password": "01234567890123456789"
+      },
+      "vault": {
+        "address": "fedcba987654321@vault.com",
+        "password": "98765432109876543210"
+      },
+      "metadata": {
+        "createdAt": 1788837314849,
+        "sessionStart": 1788822022723
+      }
+    }
+  }
+]
