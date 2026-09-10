@@ -33,13 +33,28 @@ const MAX_INBOUND_EVENTS = 500;
 // PLANOS (multiusuário)
 // ======================
 const PLANS = {
-  bronze: { name: 'Bronze', maxAccounts: 2, maxGames: 3 },
-  prata: { name: 'Prata', maxAccounts: 5, maxGames: 6 },
-  ouro: { name: 'Ouro', maxAccounts: 15, maxGames: 12 }
+  bronze: { name: 'Bronze', maxAccounts: 1, maxGames: 3, priceUsd: 1 },
+  prata: { name: 'Prata', maxAccounts: 10, maxGames: 32, priceUsd: null },
+  ouro: { name: 'Ouro', maxAccounts: 50, maxGames: 32, priceUsd: null }
 };
 function getPlan(planKey) {
   return PLANS[planKey] || PLANS.bronze;
 }
+
+// ======================
+// PLANOS DE API (separados dos planos do site — Bronze/Prata/Ouro controlam
+// contas Steam; estes controlam quantas requisições cada usuário pode fazer
+// na API por mês)
+// ======================
+const API_PLANS = {
+  basico: { name: 'Básico', limit: 100 },
+  pro: { name: 'Pro', limit: 1000 },
+  ilimitado: { name: 'Ilimitado', limit: null } // null = sem limite
+};
+function getApiPlan(planKey) {
+  return API_PLANS[planKey] || API_PLANS.basico;
+}
+const MS_30_DIAS = 30 * 24 * 60 * 60 * 1000;
 
 let accounts = [];
 let webhooks = [];
@@ -423,6 +438,11 @@ function carregarUsers() {
   try {
     users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
     if (!Array.isArray(users) || !users.length) throw new Error('vazio');
+    // Usuários vindos de uma versão anterior (sem token de API, webhook
+    // pessoal, etc.) ganham esses campos automaticamente aqui.
+    let precisaSalvar = false;
+    users.forEach(u => { if (ensureUserApiFields(u)) precisaSalvar = true; });
+    if (precisaSalvar) salvarUsers();
     return;
   } catch {
     // sem users.json ainda — migra
@@ -447,6 +467,7 @@ function carregarUsers() {
     plan: 'ouro',
     createdAt: Date.now()
   }];
+  ensureUserApiFields(users[0]);
   salvarUsers();
 }
 
@@ -454,14 +475,73 @@ function findUser(username) {
   return users.find(u => u.username === username);
 }
 
+function findUserByApiToken(token) {
+  return users.find(u => u.apiToken === token);
+}
+
+function findUserByInboundToken(token) {
+  return users.find(u => u.inboundToken === token);
+}
+
+// Garante que um usuário (novo ou migrado de uma versão antiga) tenha todos
+// os campos do sistema de API/webhook pessoal preenchidos.
+function ensureUserApiFields(u) {
+  let mudou = false;
+  if (!u.apiToken) { u.apiToken = gerarToken(); mudou = true; }
+  if (!u.apiPlan || !API_PLANS[u.apiPlan]) { u.apiPlan = 'basico'; mudou = true; }
+  if (!u.apiUsage || typeof u.apiUsage !== 'object') {
+    u.apiUsage = { count: 0, resetAt: Date.now() + MS_30_DIAS };
+    mudou = true;
+  }
+  if (!u.inboundToken) { u.inboundToken = gerarToken(); mudou = true; }
+  if (u.webhookUrl === undefined) { u.webhookUrl = null; mudou = true; }
+  if (u.webhookActive === undefined) { u.webhookActive = false; mudou = true; }
+  return mudou;
+}
+
+// Reseta a contagem de requisições se já passou 1 "mês" (30 dias) desde o
+// último reset, e devolve o uso atual.
+function usoApiAtual(u) {
+  if (!u.apiUsage) u.apiUsage = { count: 0, resetAt: Date.now() + MS_30_DIAS };
+  if (Date.now() >= u.apiUsage.resetAt) {
+    u.apiUsage.count = 0;
+    u.apiUsage.resetAt = Date.now() + MS_30_DIAS;
+    salvarUsers();
+  }
+  return u.apiUsage;
+}
+
 function userPublico(u) {
+  const uso = usoApiAtual(u);
+  const apiPlan = getApiPlan(u.apiPlan);
   return {
     id: u.id,
     username: u.username,
     role: u.role,
     plan: u.plan,
     planName: getPlan(u.plan).name,
+    apiPlan: u.apiPlan,
+    apiPlanName: apiPlan.name,
+    apiLimit: apiPlan.limit,
+    apiUsado: uso.count,
+    apiResetAt: uso.resetAt,
+    webhookActive: !!u.webhookActive,
     createdAt: u.createdAt
+  };
+}
+
+// Versão "completa" (só pro admin, usada no modal de editar usuário e na API
+// privada de admin) — inclui token de API mascarado e link/token de inbound.
+function userCompleto(u) {
+  const pub = userPublico(u);
+  const contasDoUsuario = accounts.filter(a => a.owner === u.username);
+  return {
+    ...pub,
+    apiTokenHint: u.apiToken ? `••••••••${u.apiToken.slice(-6)}` : null,
+    inboundTokenHint: u.inboundToken ? `••••••••${u.inboundToken.slice(-6)}` : null,
+    webhookUrl: u.webhookUrl || null,
+    contasCadastradas: contasDoUsuario.length,
+    contas: contasDoUsuario.map(a => a.username)
   };
 }
 
@@ -627,17 +707,9 @@ function salvarApiConfig(cfg) {
   fs.writeFileSync(API_CONFIG_FILE, JSON.stringify(cfg, null, 2));
 }
 
-// Aceita o token via query (?token=), header X-API-Token ou Authorization: Bearer.
-function verificarApiToken(req, res, next) {
-  const auth = req.headers.authorization || '';
-  const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : null;
-  const token = req.query.token || req.headers['x-api-token'] || bearer;
-
-  if (!token || token !== apiConfig.token) {
-    return res.status(401).json({ success: false, message: 'Token de API inválido ou ausente. Envie em ?token=, no header X-API-Token ou Authorization: Bearer.' });
-  }
-  next();
-}
+// NOTA: a verificação de token da API pública agora é por usuário — ver
+// verificarApiTokenUsuario / verificarApiTokenAdmin, mais abaixo no arquivo
+// (cada usuário tem seu próprio token, em vez de um único token global).
 
 // ======================
 // EXTRAÇÃO DE CONTAS A PARTIR DO BODY DO SAGE (ou de qualquer serviço parecido)
@@ -787,15 +859,46 @@ function addLog(evento, mensagem, username = null, channel = 'dashboard') {
     webhooksLog.push(entry);
     if (webhooksLog.length > MAX_LOGS) webhooksLog = webhooksLog.slice(-MAX_LOGS);
     salvarWebhooksLog();
-    io.emit('log_entry_webhooks', entry);
+    // Log de Webhooks/integrações é configuração do painel inteiro — só admin vê.
+    emitParaAdmins('log_entry_webhooks', entry);
   } else {
     dashboardLog.push(entry);
     if (dashboardLog.length > MAX_LOGS) dashboardLog = dashboardLog.slice(-MAX_LOGS);
     salvarDashboardLog();
-    io.emit('log_entry_dashboard', entry);
+    // Log da aba Dashboard fala de contas Steam específicas — cada usuário só
+    // pode ver entradas sobre contas que são dele (admin vê tudo).
+    emitLogEntryFiltrado(entry);
   }
 
   return entry;
+}
+
+// Manda um evento Socket.IO só pros sockets logados como admin.
+function emitParaAdmins(evento, payload) {
+  for (const socket of io.of('/').sockets.values()) {
+    const sess = socket.request.session;
+    if (sess?.role === 'admin') socket.emit(evento, payload);
+  }
+}
+
+// Descobre quem é o dono da conta Steam citada numa entrada de log.
+function donoDoLog(entry) {
+  if (!entry.username) return null;
+  const acc = accounts.find(a => a.username === entry.username);
+  return acc ? acc.owner : null;
+}
+
+// Manda 'log_entry_dashboard' só pro admin e pro dono da conta citada na entrada
+// (entradas sem "username" — ex: ações administrativas globais — só o admin vê).
+function emitLogEntryFiltrado(entry) {
+  const dono = donoDoLog(entry);
+  for (const socket of io.of('/').sockets.values()) {
+    const sess = socket.request.session;
+    if (!sess) continue;
+    if (sess.role === 'admin' || (dono && sess.username === dono)) {
+      socket.emit('log_entry_dashboard', entry);
+    }
+  }
 }
 
 // Monta a requisição certa pra cada tipo de webhook de saída e a dispara.
@@ -855,6 +958,26 @@ async function dispararWebhooks(evento, mensagem, username = null, channel = 'da
       log('WEBHOOK', `Erro ao enviar para "${wh.name}" (${wh.type}): ${err.message}`);
     }
   }
+
+  // Webhook PESSOAL do dono da conta Steam citada no evento (independente dos
+  // webhooks globais do admin acima) — cada usuário recebe só os eventos das
+  // próprias contas, no formato simples { event, username, message, timestamp }.
+  if (username) {
+    const acc = accounts.find(a => a.username === username);
+    const dono = acc ? findUser(acc.owner) : null;
+    if (dono && dono.webhookActive && dono.webhookUrl) {
+      try {
+        const resp = await fetch(dono.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: evento, username, message: mensagem, timestamp: Date.now() })
+        });
+        if (!resp.ok) log('WEBHOOK', `Falha no webhook pessoal de "${dono.username}": HTTP ${resp.status}`);
+      } catch (err) {
+        log('WEBHOOK', `Erro no webhook pessoal de "${dono.username}": ${err.message}`);
+      }
+    }
+  }
 }
 
 carregarUsers();
@@ -889,10 +1012,12 @@ app.post('/api/login', (req, res) => {
     req.session.role = user.role;
     req.session.plan = user.plan;
     log('AUTH', `Login bem-sucedido: ${username} (${user.role}/${user.plan})`);
+    dispararWebhooks('LOGIN', `Login bem-sucedido (${user.role}/${user.plan}).`, user.username, 'webhooks');
     return res.json({ success: true, user: userPublico(user) });
   }
 
   log('AUTH', `Tentativa de login falhou para usuário "${username}"`);
+  dispararWebhooks('LOGIN_FALHOU', `Tentativa de login falhou para o usuário "${username}".`, null, 'webhooks');
   return res.status(401).json({ success: false, message: 'Usuário ou senha inválidos.' });
 });
 
@@ -913,7 +1038,7 @@ app.get('/api/me', (req, res) => {
 // ROTAS - USUÁRIOS (só admin)
 // ======================
 app.get('/api/users', requireAdmin, (req, res) => {
-  res.json({ success: true, users: users.map(userPublico) });
+  res.json({ success: true, users: users.map(userCompleto) });
 });
 
 app.post('/api/users', requireAdmin, (req, res) => {
@@ -936,9 +1061,11 @@ app.post('/api/users', requireAdmin, (req, res) => {
       plan: planFinal,
       createdAt: Date.now()
     };
+    ensureUserApiFields(novo);
     users.push(novo);
     salvarUsers();
     log('AUTH', `Usuário criado: ${username} (${rolefinal}/${planFinal})`);
+    dispararWebhooks('USUARIO_CRIADO', `Usuário "${username}" criado pelo admin "${req.session.username}" (${rolefinal}/${planFinal}).`, null, 'webhooks');
     res.json({ success: true, message: 'Usuário criado!', user: userPublico(novo) });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Erro interno.' });
@@ -952,6 +1079,7 @@ app.post('/api/users/plan', requireAdmin, (req, res) => {
   if (!PLANS[plan]) return res.status(400).json({ success: false, message: 'Plano inválido.' });
   user.plan = plan;
   salvarUsers();
+  dispararWebhooks('PLANO_ALTERADO', `Plano do site de "${username}" alterado para ${getPlan(plan).name} (por "${req.session.username}").`, null, 'webhooks');
   res.json({ success: true, message: `Plano de "${username}" alterado para ${getPlan(plan).name}.` });
 });
 
@@ -967,6 +1095,7 @@ app.post('/api/users/password', (req, res) => {
   }
   user.passwordHash = hashPassword(password);
   salvarUsers();
+  dispararWebhooks('SENHA_ALTERADA', `Senha de "${alvo}" foi alterada${req.session.role === 'admin' && username ? ` pelo admin "${req.session.username}"` : ''}.`, null, 'webhooks');
   res.json({ success: true, message: 'Senha atualizada.' });
 });
 
@@ -979,10 +1108,13 @@ app.post('/api/users/delete', requireAdmin, (req, res) => {
   }
   users = users.filter(u => u.username !== username);
   salvarUsers();
+  dispararWebhooks('USUARIO_REMOVIDO', `Usuário "${username}" removido pelo admin "${req.session.username}".`, null, 'webhooks');
   res.json({ success: true, message: 'Usuário removido (as contas Steam dele continuam existindo, agora órfãs).' });
 });
 
 app.post('/api/logout', (req, res) => {
+  const quem = req.session.username;
+  dispararWebhooks('LOGOUT', `Logout de "${quem}".`, null, 'webhooks');
   req.session.destroy(() => {
     res.json({ success: true });
   });
@@ -1167,8 +1299,13 @@ app.post('/api/stop-account', (req, res) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ success: false, message: 'Username obrigatório.' });
 
+    // Precisa existir E ser sua (ou você ser admin) — igual às outras rotas
+    // de conta. Antes, se a conta não existisse mais em "accounts" (mas
+    // ainda tivesse um client ativo), a checagem de dono era pulada e
+    // qualquer usuário logado conseguia parar o farm de qualquer conta.
     const accAlvoStop = accounts.find(a => a.username === username);
-    if (accAlvoStop && !podeAcessarConta(req, accAlvoStop)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
+    if (!accAlvoStop) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+    if (!podeAcessarConta(req, accAlvoStop)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
 
     if (clients[username]) {
       try {
@@ -1319,7 +1456,7 @@ app.post('/api/add-webhook', requireAdmin, (req, res) => {
     };
     webhooks.push(webhook);
     salvarWebhooks();
-    io.emit('webhooks_update', webhooks);
+    emitParaAdmins('webhooks_update', webhooks);
     dispararWebhooks('WEBHOOK_ADICIONADO', `Webhook "${name}" (${type}) cadastrado.`, null, 'webhooks');
     res.json({ success: true, message: 'Webhook adicionado!', webhook });
   } catch (err) {
@@ -1334,7 +1471,7 @@ app.post('/api/delete-webhook', requireAdmin, (req, res) => {
     const wh = webhooks.find(w => w.id === id);
     webhooks = webhooks.filter(w => w.id !== id);
     salvarWebhooks();
-    io.emit('webhooks_update', webhooks);
+    emitParaAdmins('webhooks_update', webhooks);
     if (wh) dispararWebhooks('WEBHOOK_REMOVIDO', `Webhook "${wh.name}" (${wh.type}) removido.`, null, 'webhooks');
     res.json({ success: true, message: 'Webhook removido.' });
   } catch (err) {
@@ -1372,7 +1509,7 @@ app.post('/api/toggle-webhook', requireAdmin, (req, res) => {
 
     wh.active = !!active;
     salvarWebhooks();
-    io.emit('webhooks_update', webhooks);
+    emitParaAdmins('webhooks_update', webhooks);
     dispararWebhooks('WEBHOOK_ATUALIZADO', `Webhook "${wh.name}" ${wh.active ? 'ativado' : 'desativado'}.`, null, 'webhooks');
     res.json({ success: true, message: 'Webhook atualizado.' });
   } catch (err) {
@@ -1395,7 +1532,7 @@ app.post('/api/steam-key', requireAdmin, (req, res) => {
     return res.status(400).json({ success: false, message: 'Chave inválida. Cole a Steam Web API Key completa.' });
   }
   saveSteamApiKey(key.trim());
-  addLog('STEAM_API_KEY', 'Steam Web API Key atualizada.', null, 'dashboard');
+  dispararWebhooks('STEAM_API_KEY', `Steam Web API Key atualizada pelo admin "${req.session.username}".`, null, 'webhooks');
   res.json({ success: true, message: 'Chave salva!' });
 });
 
@@ -1428,6 +1565,10 @@ app.get('/api/steam/search-game', async (req, res) => {
 });
 
 app.get('/api/steam-profile/:username', async (req, res) => {
+  const contaDona = accounts.find(a => a.username === req.params.username);
+  if (!contaDona) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
+  if (!podeAcessarConta(req, contaDona)) return res.status(403).json({ success: false, message: 'Essa conta não é sua.' });
+
   const acc = statusContas[req.params.username];
   if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada.' });
 
@@ -1450,7 +1591,7 @@ app.post('/api/faceit-key', requireAdmin, (req, res) => {
     return res.status(400).json({ success: false, message: 'Chave inválida. Cole a Faceit API Key completa (Server-side API key).' });
   }
   saveFaceitApiKey(key.trim());
-  addLog('FACEIT_API_KEY', 'Faceit API Key atualizada.', null, 'dashboard');
+  dispararWebhooks('FACEIT_API_KEY', `Faceit API Key atualizada pelo admin "${req.session.username}".`, null, 'webhooks');
   res.json({ success: true, message: 'Chave salva!' });
 });
 
@@ -1544,7 +1685,7 @@ app.post('/api/import', requireAdmin, async (req, res) => {
     if (webhooksAdicionados) salvarWebhooks();
 
     if (contasAdicionadas) emitAll('import');
-    if (webhooksAdicionados) io.emit('webhooks_update', webhooks);
+    if (webhooksAdicionados) emitParaAdmins('webhooks_update', webhooks);
 
     const resumo = `Importação: ${contasAdicionadas} conta(s) e ${webhooksAdicionados} webhook(s) adicionados; ${contasIgnoradas} conta(s) e ${webhooksIgnorados} webhook(s) ignorados (duplicados ou inválidos).`;
     dispararWebhooks('CONFIG_IMPORTADA', resumo);
@@ -1573,8 +1714,20 @@ app.post('/api/inbound-regenerate', requireAdmin, (req, res) => {
 // Sem essa rota, isso batia em "Cannot GET ..." (404) mesmo com o link certo.
 // Aqui só validamos o token e respondemos OK — não processamos nada, quem
 // processa o evento de verdade continua sendo o POST abaixo.
+// Resolve quem é o "dono" de um token de entrada: pode ser o token global do
+// admin (compatibilidade com painéis antigos) ou o token pessoal de qualquer
+// usuário — cada usuário tem o seu próprio link de inbound agora.
+function resolverDonoPorInboundToken(token) {
+  if (token === inboundConfig.token) {
+    const admin = users.find(u => u.role === 'admin');
+    return admin ? admin.username : 'admin';
+  }
+  const user = findUserByInboundToken(token);
+  return user ? user.username : null;
+}
+
 app.get('/api/inbound/:token', (req, res) => {
-  if (req.params.token !== inboundConfig.token) {
+  if (!resolverDonoPorInboundToken(req.params.token)) {
     return res.status(403).json({ success: false, message: 'Token inválido.' });
   }
   res.json({ success: true, message: 'Endpoint de entrada ativo. Envie um POST com o evento/conta neste mesmo link.' });
@@ -1583,9 +1736,11 @@ app.get('/api/inbound/:token', (req, res) => {
 // Rota pública (validada pelo token na URL, não por sessão) — é nela que SAGE,
 // Discord ou qualquer outro serviço deve enviar um POST pra avisar o painel de algo.
 // Registra TUDO (mesmo que não seja reconhecido), tenta extrair conta(s) Steam
-// nova(s) do corpo, e se achar, salva + inicia o farm automaticamente.
+// nova(s) do corpo, e se achar, salva (associada a quem é dono deste token de
+// entrada) + inicia o farm automaticamente.
 app.post('/api/inbound/:token', async (req, res) => {
-  if (req.params.token !== inboundConfig.token) {
+  const donoInboundToken = resolverDonoPorInboundToken(req.params.token);
+  if (!donoInboundToken) {
     // Antes isso falhava em SILÊNCIO (nada aparecia em lugar nenhum). Agora fica
     // registrado, pra dar pra perceber quando o SAGE (ou outro serviço) está
     // batendo num link antigo/errado.
@@ -1628,14 +1783,13 @@ app.post('/api/inbound/:token', async (req, res) => {
     }
 
     const createdAt = Date.now();
-    const donoInbound = (users.find(u => u.role === 'admin') || {}).username || 'admin';
     accounts.push({
       username: conta.username,
       password: conta.password,
       games: conta.games,
       createdAt,
       origem: 'sage',
-      owner: donoInbound,
+      owner: donoInboundToken,
       email: conta.email || null,
       emailPassword: conta.emailPassword || null,
       vaultEmail: conta.vaultEmail || null,
@@ -1728,22 +1882,196 @@ app.post('/api/inbound/:token', async (req, res) => {
 });
 
 // ======================
-// ROTAS - TOKEN DA API PÚBLICA (protegidas por sessão, é aqui que o dono do
-// painel gerencia o token; quem usa a API de fora usa /api/public/*)
+// ROTAS - TOKEN DA API PESSOAL (protegidas por sessão — cada usuário logado
+// gerencia o PRÓPRIO token aqui; quem usa a API de fora usa /api/public/*
+// com esse mesmo token)
 // ======================
-app.get('/api/api-token', requireAdmin, (req, res) => {
-  res.json({ success: true, token: apiConfig.token });
+app.get('/api/api-token', (req, res) => {
+  const user = findUser(req.session.username);
+  if (!user) return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+  const uso = usoApiAtual(user);
+  const plan = getApiPlan(user.apiPlan);
+  res.json({
+    success: true,
+    token: user.apiToken,
+    apiPlan: user.apiPlan,
+    apiPlanName: plan.name,
+    limit: plan.limit,
+    usado: uso.count,
+    resetAt: uso.resetAt
+  });
 });
 
-app.post('/api/api-token/regenerate', requireAdmin, (req, res) => {
-  apiConfig = { token: gerarToken() };
-  salvarApiConfig(apiConfig);
-  addLog('API_TOKEN_REGENERADO', 'O token da API pública foi renovado (o antigo parou de funcionar).', null, 'dashboard');
-  res.json({ success: true, token: apiConfig.token });
+app.post('/api/api-token/regenerate', (req, res) => {
+  const user = findUser(req.session.username);
+  if (!user) return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+  user.apiToken = gerarToken();
+  salvarUsers();
+  addLog('API_TOKEN_REGENERADO', `Token pessoal de API de "${user.username}" foi renovado (o antigo parou de funcionar).`, null, 'dashboard');
+  res.json({ success: true, token: user.apiToken });
+});
+
+// Admin pode mudar o PLANO DE API (limite de requisições) de qualquer
+// usuário — separado do plano do site (Bronze/Prata/Ouro).
+app.post('/api/users/api-plan', requireAdmin, (req, res) => {
+  const { username, apiPlan } = req.body || {};
+  const user = findUser(username);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+  if (!API_PLANS[apiPlan]) return res.status(400).json({ success: false, message: 'Plano de API inválido.' });
+  user.apiPlan = apiPlan;
+  salvarUsers();
+  dispararWebhooks('API_PLANO_ALTERADO', `Plano de API de "${username}" alterado para ${getApiPlan(apiPlan).name} (por "${req.session.username}").`, null, 'webhooks');
+  res.json({ success: true, message: `Plano de API de "${username}" alterado para ${getApiPlan(apiPlan).name}.` });
+});
+
+// Edição completa de um usuário em uma única chamada — usada pelo modal
+// "Editar" do painel de admin (role, plano do site, plano de API e,
+// opcionalmente, uma nova senha).
+app.post('/api/users/update', requireAdmin, (req, res) => {
+  const { username, role, plan, apiPlan, password } = req.body || {};
+  const user = findUser(username);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+
+  if (role !== undefined) {
+    if (role === 'user' && user.role === 'admin' && users.filter(u => u.role === 'admin').length <= 1) {
+      return res.status(400).json({ success: false, message: 'Não é possível rebaixar o único admin.' });
+    }
+    user.role = role === 'admin' ? 'admin' : 'user';
+  }
+  if (plan !== undefined) {
+    if (!PLANS[plan]) return res.status(400).json({ success: false, message: 'Plano do site inválido.' });
+    user.plan = plan;
+  }
+  if (apiPlan !== undefined) {
+    if (!API_PLANS[apiPlan]) return res.status(400).json({ success: false, message: 'Plano de API inválido.' });
+    user.apiPlan = apiPlan;
+  }
+  if (password) {
+    if (password.length < 4) return res.status(400).json({ success: false, message: 'Senha muito curta.' });
+    user.passwordHash = hashPassword(password);
+  }
+
+  salvarUsers();
+  dispararWebhooks('USUARIO_ATUALIZADO', `Usuário "${username}" editado pelo admin "${req.session.username}"${role !== undefined ? ` · role=${user.role}` : ''}${plan !== undefined ? ` · plano=${getPlan(user.plan).name}` : ''}${apiPlan !== undefined ? ` · apiPlano=${getApiPlan(user.apiPlan).name}` : ''}${password ? ' · senha redefinida' : ''}.`, null, 'webhooks');
+  res.json({ success: true, message: 'Usuário atualizado!', user: userCompleto(user) });
 });
 
 // ======================
-// API PÚBLICA (protegida por token, pra terceiros/bots consumirem os dados)
+// WEBHOOK PESSOAL (cada usuário tem o seu — dispara só pros eventos das
+// próprias contas Steam) + link de entrada (inbound) pessoal
+// ======================
+app.get('/api/webhook-config', (req, res) => {
+  const user = findUser(req.session.username);
+  if (!user) return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+  res.json({
+    success: true,
+    webhookUrl: user.webhookUrl || '',
+    webhookActive: !!user.webhookActive,
+    inboundUrl: inboundUrl(req, user.inboundToken),
+    inboundToken: user.inboundToken
+  });
+});
+
+app.post('/api/webhook-config', (req, res) => {
+  const user = findUser(req.session.username);
+  if (!user) return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+  const { url, active } = req.body || {};
+  if (url !== undefined) {
+    if (url) {
+      try { new URL(url); } catch { return res.status(400).json({ success: false, message: 'URL inválida.' }); }
+    }
+    user.webhookUrl = url || null;
+  }
+  if (active !== undefined) user.webhookActive = !!active;
+  salvarUsers();
+  res.json({ success: true, message: 'Webhook pessoal atualizado!' });
+});
+
+app.post('/api/webhook-config/test', async (req, res) => {
+  const user = findUser(req.session.username);
+  if (!user?.webhookUrl) return res.status(400).json({ success: false, message: 'Configure a URL do seu webhook antes de testar.' });
+  try {
+    const resp = await fetch(user.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'TESTE', username: null, message: `Webhook pessoal de "${user.username}" configurado corretamente!`, timestamp: Date.now() })
+    });
+    if (!resp.ok) return res.status(400).json({ success: false, message: `A requisição respondeu com erro HTTP ${resp.status}.` });
+    res.json({ success: true, message: 'Teste enviado! Confira se chegou.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: `Não foi possível enviar: ${err.message}` });
+  }
+});
+
+app.post('/api/webhook-inbound-regenerate', (req, res) => {
+  const user = findUser(req.session.username);
+  if (!user) return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+  user.inboundToken = gerarToken();
+  salvarUsers();
+  res.json({ success: true, url: inboundUrl(req, user.inboundToken), token: user.inboundToken });
+});
+
+// ======================
+// AUTENTICAÇÃO DA API POR TOKEN (sem sessão/cookie — pra bots e serviços
+// externos). Aceita o token via ?token=, header X-API-Token ou
+// Authorization: Bearer. Cada token pertence a UM usuário e só enxerga os
+// dados DELE (contas, logs). Também controla o limite de requisições do
+// plano de API daquele usuário.
+// ======================
+function extrairToken(req) {
+  const auth = req.headers.authorization || '';
+  const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : null;
+  return req.query.token || req.headers['x-api-token'] || bearer || null;
+}
+
+function verificarApiTokenUsuario(req, res, next) {
+  const token = extrairToken(req);
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Token de API ausente. Envie em ?token=, no header X-API-Token ou Authorization: Bearer.' });
+  }
+  const user = findUserByApiToken(token);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Token de API inválido.' });
+  }
+  const uso = usoApiAtual(user);
+  const plan = getApiPlan(user.apiPlan);
+  if (plan.limit !== null && uso.count >= plan.limit) {
+    return res.status(429).json({
+      success: false,
+      message: `Limite de requisições do seu plano de API (${plan.name}: ${plan.limit}/mês) atingido. Renova em ${new Date(uso.resetAt).toLocaleString('pt-BR')}, ou peça upgrade de plano ao administrador.`
+    });
+  }
+  uso.count++;
+  salvarUsers();
+  req.apiUser = user;
+  next();
+}
+
+// Igual à de cima, mas só deixa passar se o token pertencer a uma conta
+// ADMIN — usada pelas rotas privadas de administração (/api/public/admin/*).
+function verificarApiTokenAdmin(req, res, next) {
+  const token = extrairToken(req);
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Token de API ausente. Envie em ?token=, no header X-API-Token ou Authorization: Bearer.' });
+  }
+  const user = findUserByApiToken(token);
+  if (!user || user.role !== 'admin') {
+    return res.status(401).json({ success: false, message: 'Esta é a API privada de administração: o token precisa pertencer a uma conta admin.' });
+  }
+  const uso = usoApiAtual(user);
+  const plan = getApiPlan(user.apiPlan);
+  if (plan.limit !== null && uso.count >= plan.limit) {
+    return res.status(429).json({ success: false, message: `Limite de requisições do seu plano de API (${plan.name}: ${plan.limit}/mês) atingido.` });
+  }
+  uso.count++;
+  salvarUsers();
+  req.apiUser = user;
+  next();
+}
+
+// ======================
+// API PÚBLICA — escopo PESSOAL (protegida por token; cada usuário só vê as
+// próprias contas Steam, nunca as de outros usuários)
 // ======================
 function contaPublica(acc) {
   const status = statusContas[acc.username] || {};
@@ -1762,34 +2090,109 @@ function contaPublica(acc) {
   };
 }
 
-app.get('/api/public/accounts', verificarApiToken, (req, res) => {
-  res.json({ success: true, count: accounts.length, accounts: accounts.map(contaPublica) });
+app.get('/api/public/accounts', verificarApiTokenUsuario, (req, res) => {
+  const minhas = accounts.filter(a => a.owner === req.apiUser.username);
+  res.json({ success: true, count: minhas.length, accounts: minhas.map(contaPublica) });
 });
 
-app.get('/api/public/logs', verificarApiToken, (req, res) => {
+app.get('/api/public/accounts/:username', verificarApiTokenUsuario, (req, res) => {
+  const acc = accounts.find(a => a.username === req.params.username && a.owner === req.apiUser.username);
+  if (!acc) return res.status(404).json({ success: false, message: 'Conta não encontrada (ou não é sua).' });
+  res.json({ success: true, account: contaPublica(acc) });
+});
+
+app.get('/api/public/logs', verificarApiTokenUsuario, (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), MAX_LOGS);
+  const minhasContas = new Set(accounts.filter(a => a.owner === req.apiUser.username).map(a => a.username));
+  const dashboard = dashboardLog.filter(e => e.username && minhasContas.has(e.username)).slice(-limit).reverse();
+  res.json({ success: true, dashboard });
+});
+
+// Endpoint "tudo em um" — mais prático pra bots que só querem um único GET.
+app.get('/api/public/data', verificarApiTokenUsuario, (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), MAX_LOGS);
+  const minhas = accounts.filter(a => a.owner === req.apiUser.username);
+  const minhasUsernames = new Set(minhas.map(a => a.username));
+  res.json({
+    success: true,
+    accounts: minhas.map(contaPublica),
+    logs: {
+      dashboard: dashboardLog.filter(e => e.username && minhasUsernames.has(e.username)).slice(-limit).reverse()
+    }
+  });
+});
+
+// ======================
+// API PRIVADA DE ADMIN — protegida por token de uma conta ADMIN. Enxerga e
+// gerencia TODOS os usuários e TODAS as contas do painel (a aba "API Admin"
+// aparece pra qualquer usuário no painel, mas só funciona com token de admin).
+// ======================
+app.get('/api/public/admin/users', verificarApiTokenAdmin, (req, res) => {
+  res.json({ success: true, count: users.length, users: users.map(userCompleto) });
+});
+
+app.post('/api/public/admin/users', verificarApiTokenAdmin, (req, res) => {
+  const { username, password, role, plan, apiPlan } = req.body || {};
+  if (!username || !password) return res.status(400).json({ success: false, message: 'Usuário e senha obrigatórios.' });
+  if (findUser(username)) return res.status(400).json({ success: false, message: 'Já existe um usuário com esse nome.' });
+
+  const novo = {
+    id: crypto.randomBytes(8).toString('hex'),
+    username,
+    passwordHash: hashPassword(password),
+    role: role === 'admin' ? 'admin' : 'user',
+    plan: PLANS[plan] ? plan : 'bronze',
+    createdAt: Date.now()
+  };
+  ensureUserApiFields(novo);
+  if (API_PLANS[apiPlan]) novo.apiPlan = apiPlan;
+  users.push(novo);
+  salvarUsers();
+  dispararWebhooks('USUARIO_CRIADO_VIA_API', `Usuário "${username}" criado via API privada de admin (token de "${req.apiUser.username}").`, null, 'webhooks');
+  res.json({ success: true, message: 'Usuário criado!', user: userCompleto(novo) });
+});
+
+app.get('/api/public/admin/users/:username', verificarApiTokenAdmin, (req, res) => {
+  const user = findUser(req.params.username);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+  res.json({ success: true, user: userCompleto(user) });
+});
+
+app.put('/api/public/admin/users/:username', verificarApiTokenAdmin, (req, res) => {
+  const user = findUser(req.params.username);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+  const { role, plan, apiPlan, password } = req.body || {};
+  if (role !== undefined) user.role = role === 'admin' ? 'admin' : 'user';
+  if (plan !== undefined && PLANS[plan]) user.plan = plan;
+  if (apiPlan !== undefined && API_PLANS[apiPlan]) user.apiPlan = apiPlan;
+  if (password) user.passwordHash = hashPassword(password);
+  salvarUsers();
+  dispararWebhooks('USUARIO_ATUALIZADO_VIA_API', `Usuário "${req.params.username}" editado via API privada de admin (token de "${req.apiUser.username}").`, null, 'webhooks');
+  res.json({ success: true, message: 'Usuário atualizado!', user: userCompleto(user) });
+});
+
+app.delete('/api/public/admin/users/:username', verificarApiTokenAdmin, (req, res) => {
+  const user = findUser(req.params.username);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+  if (user.role === 'admin' && users.filter(u => u.role === 'admin').length <= 1) {
+    return res.status(400).json({ success: false, message: 'Não é possível remover o único admin.' });
+  }
+  users = users.filter(u => u.username !== req.params.username);
+  salvarUsers();
+  dispararWebhooks('USUARIO_REMOVIDO_VIA_API', `Usuário "${req.params.username}" removido via API privada de admin (token de "${req.apiUser.username}").`, null, 'webhooks');
+  res.json({ success: true, message: 'Usuário removido.' });
+});
+
+app.get('/api/public/admin/accounts', verificarApiTokenAdmin, (req, res) => {
+  res.json({ success: true, count: accounts.length, accounts: accounts.map(a => ({ ...contaPublica(a), owner: a.owner })) });
+});
+
+app.get('/api/public/admin/logs', verificarApiTokenAdmin, (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), MAX_LOGS);
   res.json({
     success: true,
     dashboard: dashboardLog.slice(-limit).reverse(),
     webhooks: webhooksLog.slice(-limit).reverse()
-  });
-});
-
-app.get('/api/public/inbound-events', verificarApiToken, (req, res) => {
-  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), MAX_INBOUND_EVENTS);
-  res.json({ success: true, events: inboundEvents.slice(-limit).reverse() });
-});
-
-// Endpoint "tudo em um" — mais prático pra bots que só querem um único GET.
-app.get('/api/public/data', verificarApiToken, (req, res) => {
-  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), MAX_LOGS);
-  res.json({
-    success: true,
-    accounts: accounts.map(contaPublica),
-    logs: {
-      dashboard: dashboardLog.slice(-limit).reverse(),
-      webhooks: webhooksLog.slice(-limit).reverse()
-    }
   });
 });
 
@@ -1832,7 +2235,16 @@ setInterval(() => {
       mudou = true;
     }
   });
-  if (mudou) io.emit('tick', statusContas);
+  // IMPORTANTE: nunca usar io.emit aqui — isso mandaria as contas de TODOS os
+  // usuários pra TODO MUNDO conectado. Cada socket recebe só o que é seu
+  // (ou tudo, se for admin), igual ao emitAll().
+  if (mudou) {
+    for (const socket of io.of('/').sockets.values()) {
+      const sess = socket.request.session;
+      if (!sess) continue;
+      socket.emit('tick', sess.role === 'admin' ? statusContas : statusParaDono(sess.username));
+    }
+  }
 }, 1000);
 
 io.on('connection', (socket) => {
@@ -1841,10 +2253,19 @@ io.on('connection', (socket) => {
 
   socket.emit('update_all', isAdmin ? statusContas : statusParaDono(sess?.username));
 
-  // Webhooks e os dois logs são configuração global do painel — só o admin vê.
+  // Log da aba Dashboard: admin vê tudo; cada usuário vê só entradas sobre
+  // as próprias contas Steam (mesma regra do emitLogEntryFiltrado).
+  if (isAdmin) {
+    socket.emit('logs_init_dashboard', dashboardLog.slice(-100).reverse());
+  } else {
+    const minhasContas = new Set(accounts.filter(a => a.owner === sess?.username).map(a => a.username));
+    socket.emit('logs_init_dashboard', dashboardLog.filter(e => e.username && minhasContas.has(e.username)).slice(-100).reverse());
+  }
+
+  // Webhooks globais (do admin) e o log de integrações/entrada são
+  // configuração do painel inteiro — só o admin vê.
   if (isAdmin) {
     socket.emit('webhooks_update', webhooks);
-    socket.emit('logs_init_dashboard', dashboardLog.slice(-100).reverse());
     socket.emit('logs_init_webhooks', webhooksLog.slice(-100).reverse());
   }
 
@@ -2043,8 +2464,23 @@ async function iniciarTodas() {
   }
 }
 
+// Erros não tratados também entram no "log de tudo que acontece no site" e
+// disparam pros webhooks ativos — assim uma falha inesperada (bug, crash de
+// uma promise, etc.) chega no Discord/Telegram do admin em vez de passar
+// batido só no console do servidor.
+process.on('uncaughtException', (err) => {
+  log('ERROR', 'uncaughtException', err.stack || err.message);
+  dispararWebhooks('ERRO_INESPERADO', `Exceção não tratada: ${err.message}`, null, 'webhooks');
+});
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  log('ERROR', 'unhandledRejection', msg);
+  dispararWebhooks('ERRO_INESPERADO', `Promise rejeitada sem tratamento: ${msg}`, null, 'webhooks');
+});
+
 server.listen(PORT, () => {
   log('BOOT', `Painel em http://localhost:${PORT}`);
   log('BOOT', `Login: usuário "${authConfig.username}" (troque a senha com: node set-password.js <usuario> <senha>)`);
+  dispararWebhooks('SERVIDOR_INICIADO', 'O painel foi iniciado/reiniciado.', null, 'webhooks');
   iniciarTodas();
 });

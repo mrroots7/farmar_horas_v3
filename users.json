@@ -1,10 +1,19 @@
 [
   {
-    "id": "67494cba02a09f88",
+    "id": "admin-default",
     "username": "admin",
-    "passwordHash": "39db53472ac767acc7ab21f7044e058c:0f51e86d56f61515fbf35b58e8e756ac3f098a4095827d258aa04502229dd025b3b2ae83fc5f3f16d4e6a5aa394b7eaf5e2ea0ffcedcf7a149927746dcb86414",
+    "passwordHash": "c486ebd7defe133387d714564aafd983:20aa2e87e659bbacd5fb857871cd86d6c40f547dabc78ab069ef415cb71cc916fa03da19cfd400b47810aee9126e1621a9e6fef25616cb9d5617fb55fac8e7b2",
     "role": "admin",
     "plan": "ouro",
-    "createdAt": 1788848413330
+    "createdAt": 1788983828896,
+    "apiPlan": "ilimitado",
+    "apiToken": "3cc2504e70596fe87614a6d205cb57f3cb3656ecbb5e82b7",
+    "apiUsage": {
+      "count": 0,
+      "resetAt": 1791575828896
+    },
+    "inboundToken": "admin-default-inbound",
+    "webhookUrl": null,
+    "webhookActive": false
   }
 ]

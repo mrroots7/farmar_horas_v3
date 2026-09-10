@@ -799,41 +799,6 @@ tr:hover td { background: rgba(255, 31, 61, .04); }
 }
 
 /* Aba API */
-.api-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.api-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.api-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.02);
-}
-
-.api-metric span {
-  font-size: .68rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .3px;
-}
-
-.api-metric strong {
-  font-size: .9rem;
-  color: var(--text);
-}
-
 .api-endpoints {
   display: grid;
   gap: 10px;
@@ -874,19 +839,6 @@ tr:hover td { background: rgba(255, 31, 61, .04); }
   margin: 6px 0 0;
   color: var(--muted);
   font-size: .8rem;
-}
-
-.api-example {
-  margin: 8px 0 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #0a0709;
-  border: 1px solid var(--line);
-  color: #d8cfd2;
-  overflow-x: auto;
-  font-size: .76rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
 }
 
 #apiLangSelect { width: auto; }
@@ -951,6 +903,48 @@ tr:hover td { background: rgba(255, 31, 61, .04); }
 .tok-comment { color: #6f7a8f; font-style: italic; }
 .tok-string { color: #8fe0b2; }
 .tok-keyword { color: var(--accent); font-weight: 700; }
+
+/* Exemplo + resultado dentro de cada endpoint da aba API/API Admin */
+.api-endpoint-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.api-endpoint-example {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0a0709;
+  border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .76rem;
+  line-height: 1.5;
+  color: #d8cfd2;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.api-endpoint-result {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0d1410;
+  border: 1px solid rgba(143, 224, 178, .25);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .76rem;
+  line-height: 1.5;
+  color: #b9e8cc;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.api-endpoint-result.err { background: #170e10; border-color: rgba(255, 100, 100, .3); color: #ffb0b0; }
 
 .log-msg {
   color: var(--text);
@@ -1019,7 +1013,6 @@ tr:hover td { background: rgba(255, 31, 61, .04); }
 /* Responsive */
 @media (max-width: 900px) {
   .grid { grid-template-columns: 1fr; }
-  .api-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 700px) {

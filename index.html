@@ -29,9 +29,10 @@
       <button class="tab active" onclick="showTab('dash', this)">Dashboard</button>
       <button class="tab" onclick="showTab('profiles', this)">Perfis</button>
       <button class="tab hidden" id="tabBtn-bans" onclick="showTab('bans', this)">Bans</button>
-      <button class="tab" id="tabBtn-webhooks" onclick="showTab('webhooks', this)">Webhooks</button>
+      <button class="tab hidden" id="tabBtn-webhooks" onclick="showTab('webhooks', this)">Webhooks</button>
       <button class="tab" id="tabBtn-api" onclick="showTab('api', this)">API</button>
-      <button class="tab" id="tabBtn-importexport" onclick="showTab('importexport', this)">Importar/Exportar</button>
+      <button class="tab" id="tabBtn-api-admin" onclick="showTab('api-admin', this)">API Admin</button>
+      <button class="tab hidden" id="tabBtn-importexport" onclick="showTab('importexport', this)">Importar/Exportar</button>
       <button class="tab hidden" id="tabBtn-users" onclick="showTab('users', this)">Usuários</button>
     </div>
 
@@ -242,75 +243,95 @@
 
     <div id="tab-api" class="hidden">
       <section class="card about-card">
-        <h2>API pública do painel</h2>
-        <p class="about-line"><strong>O que é:</strong> um jeito de terceiros (bots, outros sites) consultarem as contas e os logs deste painel em JSON.</p>
+        <h2>API pessoal</h2>
+        <p class="about-line"><strong>O que é:</strong> um jeito de você (ou um bot seu) consultar em JSON só as SUAS contas Steam e os SEUS logs — nunca os de outros usuários.</p>
         <p class="about-line"><strong>Segurança:</strong> todo endpoint exige o token abaixo — sem ele, ninguém acessa nada. A senha das contas Steam nunca é exposta pela API.</p>
       </section>
 
-      <div class="api-grid">
-        <section class="card">
-          <h2>Seu token de API</h2>
-          <p class="hint">Use este token em <code>?token=</code>, no header <code>X-API-Token</code> ou em <code>Authorization: Bearer</code>.</p>
-          <div class="inbound-row">
-            <input id="apiTokenInput" readonly>
-            <button class="btn-sm btn-ghost" onclick="copyApiToken()">Copiar</button>
-            <button class="btn-sm btn-warn" onclick="regenApiToken()">Gerar novo token</button>
-          </div>
-          <div id="apiTokenMessage"></div>
-          <div class="api-metrics" id="apiPlanMetrics"></div>
-        </section>
-
-        <section class="card">
-          <h2>Webhook pessoal</h2>
-          <p class="hint">Receba alertas de eventos das suas contas em um endpoint externo. O webhook só dispara para as contas que pertencem ao seu usuário.</p>
-          <div class="inbound-row">
-            <input id="userWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
-            <button class="btn-sm btn-primary" onclick="saveUserWebhook()">Salvar</button>
-          </div>
-          <label class="check-inline" style="margin-top:10px;">
-            <input type="checkbox" id="userWebhookActive">
-            Ativar webhook pessoal
-          </label>
-          <div class="row-actions" style="margin-top:10px;">
-            <button class="btn-sm btn-ghost" onclick="testUserWebhook()">Testar</button>
-            <button class="btn-sm btn-warn" onclick="copyUserWebhookUrl()">Copiar URL</button>
-          </div>
-          <div id="userWebhookMessage"></div>
-        </section>
-      </div>
-
       <section class="card">
-        <h2>Endpoints disponíveis</h2>
-        <div class="api-endpoints" id="apiEndpointsList"></div>
+        <h2>Seu token de API</h2>
+        <p class="hint">Use este token em <code>?token=</code>, no header <code>X-API-Token</code> ou em <code>Authorization: Bearer</code>.</p>
+        <div class="inbound-row">
+          <input id="apiTokenInput" readonly>
+          <button class="btn-sm btn-ghost" onclick="copyToClipboard('apiTokenInput','apiTokenMessage')">Copiar</button>
+          <button class="btn-sm btn-warn" onclick="regenApiToken()">Gerar novo token</button>
+        </div>
+        <p class="hint" id="apiPlanInfo">—</p>
+        <div id="apiTokenMessage"></div>
       </section>
 
       <section class="card">
+        <h2>Webhook pessoal (saída)</h2>
+        <p class="hint">Sempre que uma das SUAS contas Steam mudar de status (online, erro, parada etc.), o painel envia um POST em JSON pra essa URL: <code>{ event, username, message, timestamp }</code>.</p>
+        <div class="form-group">
+          <label>URL do seu webhook (Discord, n8n, seu próprio backend, etc.)</label>
+          <input id="myWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <label class="check-inline">
+          <input type="checkbox" id="myWebhookActive">
+          Ativo
+        </label>
+        <div class="inbound-row" style="margin-top:10px;">
+          <button class="btn-sm btn-primary" onclick="saveMyWebhook()">Salvar</button>
+          <button class="btn-sm btn-ghost" onclick="testMyWebhook()">Testar</button>
+        </div>
+        <div id="myWebhookMessage"></div>
+      </section>
+
+      <section class="card">
+        <h2>Link de recebimento pessoal (entrada)</h2>
+        <p class="hint">Cole este link no SAGE (ou outro serviço) pra que as contas Steam cadastradas por lá caiam automaticamente no seu painel, com você como dono.</p>
+        <div class="inbound-row">
+          <input id="myInboundUrl" readonly>
+          <button class="btn-sm btn-ghost" onclick="copyToClipboard('myInboundUrl','myInboundMessage')">Copiar</button>
+          <button class="btn-sm btn-warn" onclick="regenMyInbound()">Gerar novo link</button>
+        </div>
+        <div id="myInboundMessage"></div>
+      </section>
+
+      <section class="card">
+        <h2>Endpoints disponíveis</h2>
+        <p class="hint">Cada endpoint abaixo já vem com um exemplo pronto (na linguagem escolhida), um botão pra copiar e um botão pra testar direto no navegador.</p>
         <div class="section-title-row">
-          <h2 style="margin:0; border:0; padding:0;">Exemplo de uso</h2>
-          <select id="apiLangSelect" onchange="renderApiExample()">
+          <span></span>
+          <select id="apiLangSelect" onchange="renderApiEndpoints()">
             <option value="node">Node.js</option>
             <option value="fetch">JavaScript (fetch)</option>
             <option value="python">Python</option>
             <option value="curl">cURL</option>
           </select>
         </div>
+        <div class="api-endpoints" id="apiEndpointsList"></div>
+      </section>
+    </div>
 
-        <div class="code-editor">
-          <div class="code-editor-toolbar">
-            <span class="code-editor-lang" id="apiCodeLangTag">Node.js</span>
-            <div class="code-editor-actions">
-              <button class="btn-sm btn-ghost" id="apiEditBtn" onclick="toggleApiEdit()">Editar</button>
-              <button class="btn-sm btn-ghost" onclick="copyApiExample()">Copiar</button>
-            </div>
-          </div>
-          <pre id="apiCodeView" class="code-editor-view"><code id="apiCodeHighlight"></code></pre>
-          <textarea id="apiCodeEdit" class="code-editor-edit hidden" spellcheck="false"></textarea>
+    <div id="tab-api-admin" class="hidden">
+      <section class="card about-card">
+        <h2>API privada de administração</h2>
+        <p class="about-line"><strong>O que é:</strong> os mesmos endpoints públicos, mas escopo TOTAL — vê e gerencia todos os usuários e todas as contas do painel.</p>
+        <p class="about-line"><strong>Segurança:</strong> só funciona com o token de API de uma conta <strong>admin</strong>. Se você não for admin, cole aqui o token de um admin para testar (ou peça o seu para o administrador do painel).</p>
+      </section>
+
+      <section class="card">
+        <h2>Token de admin pra testar</h2>
+        <p class="hint">Se a sua conta já é admin, o seu token de API (aba "API") já funciona aqui. Caso contrário, cole abaixo o token de uma conta admin.</p>
+        <div class="inbound-row">
+          <input id="adminApiTokenInput" placeholder="Cole aqui o token de uma conta admin">
+          <button class="btn-sm btn-ghost" onclick="useMyTokenAsAdmin()">Usar meu token</button>
         </div>
       </section>
 
-      <section class="card hidden" id="apiAdminCard">
-        <h2>API Admin</h2>
-        <p class="hint">A mesma conta com token de admin pode usar estas rotas. Elas enxergam todos os usuários e todas as contas do painel.</p>
+      <section class="card">
+        <h2>Endpoints disponíveis</h2>
+        <div class="section-title-row">
+          <span></span>
+          <select id="apiAdminLangSelect" onchange="renderApiAdminEndpoints()">
+            <option value="node">Node.js</option>
+            <option value="fetch">JavaScript (fetch)</option>
+            <option value="python">Python</option>
+            <option value="curl">cURL</option>
+          </select>
+        </div>
         <div class="api-endpoints" id="apiAdminEndpointsList"></div>
       </section>
     </div>
@@ -357,9 +378,9 @@
     <div id="tab-users" class="hidden">
       <section class="card about-card">
         <h2>Usuários &amp; planos</h2>
-        <p class="about-line"><strong>Bronze:</strong> até 2 contas Steam, 3 jogos por conta.</p>
-        <p class="about-line"><strong>Prata:</strong> até 5 contas Steam, 6 jogos por conta.</p>
-        <p class="about-line"><strong>Ouro:</strong> até 15 contas Steam, 12 jogos por conta.</p>
+        <p class="about-line"><strong>Bronze:</strong> US$ 1 · até 1 conta Steam, 3 jogos por conta.</p>
+        <p class="about-line"><strong>Prata:</strong> até 10 contas Steam, 32 jogos por conta.</p>
+        <p class="about-line"><strong>Ouro:</strong> até 50 contas Steam, 32 jogos por conta.</p>
         <p class="about-line"><strong>Admin:</strong> sem limite, gerencia usuários e vê todas as contas do painel.</p>
       </section>
 
@@ -404,7 +425,7 @@
                   <th>Usuário</th>
                   <th>Função</th>
                   <th>Plano</th>
-                  <th>API</th>
+                  <th>Plano de API</th>
                   <th>Criado em</th>
                   <th>Ações</th>
                 </tr>
@@ -417,12 +438,45 @@
     </div>
   </div>
 
-  <div id="userEditModalOverlay" class="steam-modal-overlay hidden" onclick="if(event.target===this) closeUserEditModal()">
-    <div class="steam-modal guard-modal">
-      <button class="steam-modal-close" onclick="closeUserEditModal()">&times;</button>
-      <div class="logo login-logo" style="margin:0 auto 14px;">SF</div>
+  <!-- Modal: Editar usuário (admin) -->
+  <div id="editUserModalOverlay" class="steam-modal-overlay hidden" onclick="if(event.target===this) closeEditUserModal()">
+    <div class="steam-modal">
+      <button class="steam-modal-close" onclick="closeEditUserModal()">&times;</button>
       <h1 class="login-title" style="text-align:center;">Editar usuário</h1>
-      <div id="userEditModalBody"></div>
+      <p class="login-sub" id="editUserSub" style="text-align:center;">—</p>
+
+      <form id="editUserForm">
+        <div class="form-group">
+          <label>Função</label>
+          <select id="editUserRole">
+            <option value="user">Usuário</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Plano do site</label>
+          <select id="editUserPlan">
+            <option value="bronze">Bronze</option>
+            <option value="prata">Prata</option>
+            <option value="ouro">Ouro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Plano de API</label>
+          <select id="editUserApiPlan">
+            <option value="basico">Básico (100 req/mês)</option>
+            <option value="pro">Pro (1000 req/mês)</option>
+            <option value="ilimitado">Ilimitado</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Nova senha (deixe em branco pra não alterar)</label>
+          <input id="editUserPassword" type="password" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary" type="submit">Salvar alterações</button>
+      </form>
+
+      <div id="editUserMessage"></div>
     </div>
   </div>
 

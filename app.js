@@ -8,6 +8,7 @@ let bansOpen = false;
 let webhooksOpen = false;
 let dashOpen = true; // Dashboard é a aba inicial
 let apiOpen = false;
+let apiAdminOpen = false;
 let usersOpen = false;
 let me = null; // { user: {username, role, plan, planName}, limits: {...} }
 let usersList = [];
@@ -23,6 +24,7 @@ function showTab(name, btn) {
   document.getElementById('tab-bans').classList.toggle('hidden', name !== 'bans');
   document.getElementById('tab-webhooks').classList.toggle('hidden', name !== 'webhooks');
   document.getElementById('tab-api').classList.toggle('hidden', name !== 'api');
+  document.getElementById('tab-api-admin').classList.toggle('hidden', name !== 'api-admin');
   document.getElementById('tab-importexport').classList.toggle('hidden', name !== 'importexport');
   document.getElementById('tab-users').classList.toggle('hidden', name !== 'users');
 
@@ -31,13 +33,15 @@ function showTab(name, btn) {
   bansOpen = name === 'bans';
   webhooksOpen = name === 'webhooks';
   apiOpen = name === 'api';
+  apiAdminOpen = name === 'api-admin';
   usersOpen = name === 'users';
 
   if (dashOpen) { renderDashboardActivity(); loadMe(); }
   if (profilesOpen) { renderProfiles(true); if (me?.user?.role === 'admin') loadSteamKeyInfo(); }
   if (bansOpen) { renderBansTable(); loadFaceitKeyInfo(); }
   if (webhooksOpen) { renderWebhooks(); renderWebhooksActivity(); loadInboundInfo(); }
-  if (apiOpen) { loadApiToken(); renderApiEndpoints(); renderApiExample(); }
+  if (apiOpen) { loadApiToken(); loadMyWebhookConfig(); }
+  if (apiAdminOpen) renderApiAdminEndpoints();
   if (usersOpen) loadUsers();
 }
 
@@ -1089,10 +1093,12 @@ async function exportConfig() {
 }
 
 // ======================
-// ABA API — token público + documentação + exemplos de código
+// ABA API (pessoal) + ABA API ADMIN — token, webhook pessoal, link de
+// entrada pessoal, e documentação com exemplo + copiar + testar por endpoint
 // ======================
 let apiToken = '';
-let apiEditing = false;
+let adminApiToken = '';
+const API_LANG_LABELS = { node: 'Node.js', fetch: 'JavaScript (fetch)', python: 'Python', curl: 'cURL' };
 
 async function loadApiToken() {
   try {
@@ -1102,34 +1108,23 @@ async function loadApiToken() {
       apiToken = result.token;
       const input = document.getElementById('apiTokenInput');
       if (input) input.value = apiToken;
-      renderApiExample();
+      const info = document.getElementById('apiPlanInfo');
+      if (info) {
+        const reset = result.resetAt ? new Date(result.resetAt).toLocaleString('pt-BR') : '—';
+        const limite = result.limit === null ? 'sem limite' : `${result.usado}/${result.limit} requisições`;
+        info.textContent = `Plano de API: ${result.apiPlanName} · ${limite} este ciclo · renova em ${reset}.`;
+      }
       renderApiEndpoints();
-      renderApiPlanMetrics(result);
     }
   } catch { }
 }
 
-function renderApiPlanMetrics(result) {
-  const box = document.getElementById('apiPlanMetrics');
-  if (!box) return;
-  const plan = result?.apiPlanName || 'Básico';
-  const limit = result?.limit ?? null;
-  const usado = result?.usado ?? 0;
-  const resetAt = result?.resetAt ? new Date(result.resetAt).toLocaleString('pt-BR') : '—';
-  const limitText = limit === null ? 'Ilimitado' : `${usado}/${limit} req`;
-  box.innerHTML = `
-    <div class="api-metric"><span>Plano</span><strong>${plan}</strong></div>
-    <div class="api-metric"><span>Uso atual</span><strong>${limitText}</strong></div>
-    <div class="api-metric"><span>Reset</span><strong>${resetAt}</strong></div>
-  `;
-}
-
-function copyApiToken() {
-  const input = document.getElementById('apiTokenInput');
-  const msg = document.getElementById('apiTokenMessage');
+function copyToClipboard(inputId, msgId) {
+  const input = document.getElementById(inputId);
+  const msg = msgId ? document.getElementById(msgId) : null;
   if (!input || !input.value) return;
   navigator.clipboard.writeText(input.value).then(() => {
-    if (msg) { msg.style.color = '#8fe0b2'; msg.textContent = 'Token copiado!'; }
+    if (msg) { msg.style.color = '#8fe0b2'; msg.textContent = 'Copiado!'; }
   }).catch(() => {
     input.select();
     document.execCommand('copy');
@@ -1144,7 +1139,6 @@ async function regenApiToken() {
     apiToken = result.token;
     const input = document.getElementById('apiTokenInput');
     if (input) input.value = apiToken;
-    renderApiExample();
     renderApiEndpoints();
   }
   if (msg) {
@@ -1153,174 +1147,171 @@ async function regenApiToken() {
   }
 }
 
-function renderApiEndpoints() {
-  const box = document.getElementById('apiEndpointsList');
+// ------ Webhook pessoal (URL de saída) + link de entrada pessoal ------
+async function loadMyWebhookConfig() {
+  try {
+    const res = await fetch('/api/webhook-config');
+    const result = await res.json();
+    if (!result.success) return;
+    const urlInput = document.getElementById('myWebhookUrl');
+    const activeChk = document.getElementById('myWebhookActive');
+    const inboundInput = document.getElementById('myInboundUrl');
+    if (urlInput) urlInput.value = result.webhookUrl || '';
+    if (activeChk) activeChk.checked = !!result.webhookActive;
+    if (inboundInput) inboundInput.value = result.inboundUrl || '';
+  } catch { }
+}
+
+async function saveMyWebhook() {
+  const url = document.getElementById('myWebhookUrl')?.value.trim() || '';
+  const active = document.getElementById('myWebhookActive')?.checked || false;
+  const msg = document.getElementById('myWebhookMessage');
+  const result = await postJSON('/api/webhook-config', { url, active });
+  if (msg) {
+    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
+    msg.textContent = result.message || '';
+  }
+}
+
+async function testMyWebhook() {
+  const msg = document.getElementById('myWebhookMessage');
+  const result = await postJSON('/api/webhook-config/test', {});
+  if (msg) {
+    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
+    msg.textContent = result.message || '';
+  }
+}
+
+async function regenMyInbound() {
+  if (!confirm('Gerar um novo link pessoal vai invalidar o atual. Continuar?')) return;
+  const result = await postJSON('/api/webhook-inbound-regenerate', {});
+  const input = document.getElementById('myInboundUrl');
+  const msg = document.getElementById('myInboundMessage');
+  if (result.url && input) input.value = result.url;
+  if (msg) { msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0'; msg.textContent = result.success ? 'Novo link gerado!' : (result.message || 'Erro ao gerar novo link.'); }
+}
+
+// ------ Documentação: exemplo de código por linguagem, genérico pra qualquer endpoint ------
+function codeExampleFor(method, url, lang, body) {
+  const bodyStr = body ? JSON.stringify(body) : null;
+
+  if (lang === 'curl') {
+    let cmd = `curl -X ${method} "${url}"`;
+    if (bodyStr) cmd += ` \\\n  -H "Content-Type: application/json" \\\n  -d '${bodyStr}'`;
+    return cmd;
+  }
+  if (lang === 'python') {
+    const fn = method === 'GET' ? 'requests.get' : `requests.${method.toLowerCase()}`;
+    let call = `resp = ${fn}('${url}'`;
+    if (bodyStr) call += `, json=${bodyStr}`;
+    call += ')';
+    return `import requests\n\n${call}\ndados = resp.json()\nprint(dados)`;
+  }
+  if (lang === 'fetch') {
+    let opts = `{ method: '${method}'`;
+    if (bodyStr) opts += `, headers: { 'Content-Type': 'application/json' }, body: '${bodyStr.replace(/'/g, "\\'")}'`;
+    opts += ' }';
+    return `fetch('${url}', ${opts})\n  .then(res => res.json())\n  .then(dados => console.log(dados));`;
+  }
+  // node
+  let opts = method === 'GET' ? '' : `, {\n  method: '${method}',${bodyStr ? `\n  headers: { 'Content-Type': 'application/json' },\n  body: '${bodyStr.replace(/'/g, "\\'")}'` : ''}\n}`;
+  return `// Node.js 18+ (fetch nativo)\nconst res = await fetch('${url}'${opts});\nconst dados = await res.json();\nconsole.log(dados);`;
+}
+
+function endpointAuthedUrl(path, token) {
+  const origin = window.location.origin;
+  return path.includes('?') ? `${origin}${path}&token=${token}` : `${origin}${path}?token=${token}`;
+}
+
+// Renderiza uma lista de endpoints em um container, com exemplo (na linguagem
+// escolhida) + botão copiar + (se GET) botão testar com resultado inline.
+function renderEndpointsInto(boxId, langSelectId, endpoints, token) {
+  const box = document.getElementById(boxId);
   if (!box) return;
-  const token = apiToken || 'SEU_TOKEN';
+  const lang = document.getElementById(langSelectId)?.value || 'node';
 
-  const endpoints = [
-    { method: 'GET', path: `/api/public/accounts?token=${token}`, desc: 'Lista todas as contas salvas com o status atual (sem expor senha).', example: '{"success":true,"count":1,"accounts":[{"username":"steamuser","status":"ONLINE","games":[730]}]}' },
-    { method: 'GET', path: `/api/public/accounts/${token === 'SEU_TOKEN' ? 'usuario' : 'meuUsuario'}?token=${token}`, desc: 'Consulta uma conta específica do dono do token.', example: '{"success":true,"account":{"username":"steamuser","status":"ONLINE"}}' },
-    { method: 'GET', path: `/api/public/logs?token=${token}&limit=20`, desc: 'Retorna os logs de atividade do seu usuário.', example: '{"success":true,"dashboard":[{"evento":"CONTA_ONLINE","username":"steamuser"}]}' },
-    { method: 'GET', path: `/api/public/data?token=${token}&limit=20`, desc: 'Retorna tudo (contas + logs) em uma única resposta — ideal pra bots.', example: '{"success":true,"accounts":[{}],"logs":{"dashboard":[{}]}}' }
-  ];
-
-  box.innerHTML = endpoints.map(e => `
+  box.innerHTML = endpoints.map((e, i) => {
+    const url = endpointAuthedUrl(e.path, token || 'SEU_TOKEN');
+    const code = codeExampleFor(e.method, url, lang, e.body);
+    const id = `${boxId}-${i}`;
+    return `
     <div class="api-endpoint">
       <div class="api-endpoint-head">
         <span class="api-method">${e.method}</span>
         <code class="api-path">${e.path}</code>
-        <button class="btn-sm btn-ghost" onclick="copyText('${e.path.replace(/'/g, "\\'")}')">Copiar</button>
       </div>
       <p class="api-endpoint-desc">${e.desc}</p>
-      <pre class="api-example">${escapeHtml(e.example)}</pre>
-    </div>
-  `).join('');
-
-  const adminBox = document.getElementById('apiAdminEndpointsList');
-  if (adminBox) {
-    const adminEndpoints = [
-      { method: 'GET', path: `/api/public/admin/users?token=${token}`, desc: 'Lista todos os usuários cadastrados no painel.', example: '{"success":true,"count":3,"users":[{"username":"admin","role":"admin"}]}' },
-      { method: 'GET', path: `/api/public/admin/accounts?token=${token}`, desc: 'Lista todas as contas de todos os usuários.', example: '{"success":true,"count":12,"accounts":[{"username":"steamuser","owner":"admin"}]}' },
-      { method: 'GET', path: `/api/public/admin/logs?token=${token}&limit=20`, desc: 'Retorna os logs globais do painel.', example: '{"success":true,"dashboard":[{"evento":"CONTA_ONLINE"}]}' }
-    ];
-    adminBox.innerHTML = adminEndpoints.map(e => `
-      <div class="api-endpoint">
-        <div class="api-endpoint-head">
-          <span class="api-method">${e.method}</span>
-          <code class="api-path">${e.path}</code>
-          <button class="btn-sm btn-ghost" onclick="copyText('${e.path.replace(/'/g, "\\'")}')">Copiar</button>
-        </div>
-        <p class="api-endpoint-desc">${e.desc}</p>
-        <pre class="api-example">${escapeHtml(e.example)}</pre>
+      <pre class="api-endpoint-example" id="${id}-code">${escapeHtml(code)}</pre>
+      <div class="api-endpoint-actions">
+        <button class="btn-sm btn-ghost" onclick="copyEndpointExample('${id}-code', this)">Copiar</button>
+        ${e.method === 'GET' ? `<button class="btn-sm btn-ghost" onclick="testEndpoint('${id}', '${e.path}', '${token || ''}')">Testar</button>` : ''}
       </div>
-    `).join('');
+      <pre class="api-endpoint-result hidden" id="${id}-result"></pre>
+    </div>`;
+  }).join('');
+}
+
+function copyEndpointExample(codeId, btn) {
+  const el = document.getElementById(codeId);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    if (btn) {
+      const original = btn.textContent;
+      btn.textContent = 'Copiado!';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    }
+  }).catch(() => { });
+}
+
+async function testEndpoint(id, path, token) {
+  const resultEl = document.getElementById(`${id}-result`);
+  if (!resultEl) return;
+  resultEl.classList.remove('hidden', 'err');
+  resultEl.textContent = 'Consultando...';
+  try {
+    const url = endpointAuthedUrl(path, token || apiToken);
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!res.ok) resultEl.classList.add('err');
+    resultEl.textContent = JSON.stringify(json, null, 2);
+  } catch (err) {
+    resultEl.classList.add('err');
+    resultEl.textContent = `Erro: ${err.message}`;
   }
 }
 
-function copyText(value) {
-  const text = value.trim();
-  navigator.clipboard.writeText(text).then(() => alert('URL copiada!')).catch(() => {
-    const input = document.createElement('textarea');
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand('copy');
-    input.remove();
-    alert('URL copiada!');
-  });
+function renderApiEndpoints() {
+  const endpoints = [
+    { method: 'GET', path: '/api/public/accounts', desc: 'Lista todas as SUAS contas salvas com o status atual (sem expor senha).' },
+    { method: 'GET', path: '/api/public/accounts/SEU_USERNAME_STEAM', desc: 'Detalhes de uma conta específica sua (troque SEU_USERNAME_STEAM pelo username Steam real).' },
+    { method: 'GET', path: '/api/public/logs', desc: 'Retorna os logs de atividade das suas contas.' },
+    { method: 'GET', path: '/api/public/data', desc: 'Retorna tudo (contas + logs) em uma única resposta — ideal pra bots.' }
+  ];
+  renderEndpointsInto('apiEndpointsList', 'apiLangSelect', endpoints, apiToken);
 }
 
-// Gera o código de exemplo pra cada linguagem, sempre com a URL e o token reais do painel.
-function apiExampleCode(lang) {
-  const origin = window.location.origin;
-  const token = apiToken || 'SEU_TOKEN_AQUI';
-  const url = `${origin}/api/public/data?token=${token}`;
-
-  const examples = {
-    node: `// Node.js 18+ (usa o fetch nativo, sem precisar instalar nada)
-async function getDadosDoPainel() {
-  const res = await fetch('${url}');
-  const dados = await res.json();
-  console.log(dados.accounts);
-  return dados;
+// ------ Aba "API Admin" — mesmos moldes, mas endpoints /api/public/admin/* ------
+function useMyTokenAsAdmin() {
+  const input = document.getElementById('adminApiTokenInput');
+  if (input) input.value = apiToken;
+  renderApiAdminEndpoints();
 }
 
-getDadosDoPainel();`,
+function renderApiAdminEndpoints() {
+  adminApiToken = document.getElementById('adminApiTokenInput')?.value.trim() || apiToken;
+  const input = document.getElementById('adminApiTokenInput');
+  if (input && !input.value) input.value = adminApiToken;
 
-    fetch: `// JavaScript no navegador (ou em qualquer app que já use fetch)
-fetch('${url}')
-  .then(res => res.json())
-  .then(dados => {
-    console.log(dados.accounts);
-  });`,
-
-    python: `import requests
-
-resp = requests.get(
-    '${origin}/api/public/data',
-    params={'token': '${token}'}
-)
-dados = resp.json()
-print(dados['accounts'])`,
-
-    curl: `curl "${url}"`
-  };
-
-  return examples[lang] || examples.node;
-}
-
-// Highlight simples (sem dependências externas): colore comentários, strings
-// e palavras-chave via regex, uma linguagem por vez.
-function highlightCode(code, lang) {
-  let escaped = code
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  const rules = {
-    node: [
-      [/(\/\/.*$)/gm, 'tok-comment'],
-      [/(`[^`]*`|'[^']*'|"[^"]*")/g, 'tok-string'],
-      [/\b(async|function|await|const|let|return|console|log|new)\b/g, 'tok-keyword']
-    ],
-    fetch: [
-      [/(\/\/.*$)/gm, 'tok-comment'],
-      [/(`[^`]*`|'[^']*'|"[^"]*")/g, 'tok-string'],
-      [/\b(function|return|then|const|let)\b/g, 'tok-keyword']
-    ],
-    python: [
-      [/(#.*$)/gm, 'tok-comment'],
-      [/('[^']*'|"[^"]*")/g, 'tok-string'],
-      [/\b(import|def|return|print)\b/g, 'tok-keyword']
-    ],
-    curl: [
-      [/("[^"]*")/g, 'tok-string'],
-      [/\b(curl)\b/g, 'tok-keyword']
-    ]
-  };
-
-  (rules[lang] || rules.node).forEach(([regex, cls]) => {
-    escaped = escaped.replace(regex, m => `<span class="${cls}">${m}</span>`);
-  });
-
-  return escaped;
-}
-
-const API_LANG_LABELS = { node: 'Node.js', fetch: 'JavaScript (fetch)', python: 'Python', curl: 'cURL' };
-
-function renderApiExample() {
-  const lang = document.getElementById('apiLangSelect')?.value || 'node';
-  const code = apiExampleCode(lang);
-
-  const highlightEl = document.getElementById('apiCodeHighlight');
-  const editEl = document.getElementById('apiCodeEdit');
-  const langTag = document.getElementById('apiCodeLangTag');
-
-  if (highlightEl) highlightEl.innerHTML = highlightCode(code, lang);
-  if (editEl) editEl.value = code;
-  if (langTag) langTag.textContent = API_LANG_LABELS[lang] || 'Node.js';
-}
-
-function toggleApiEdit() {
-  apiEditing = !apiEditing;
-  document.getElementById('apiCodeView')?.classList.toggle('hidden', apiEditing);
-  document.getElementById('apiCodeEdit')?.classList.toggle('hidden', !apiEditing);
-  const btn = document.getElementById('apiEditBtn');
-  if (btn) btn.textContent = apiEditing ? 'Visualizar' : 'Editar';
-  if (apiEditing) document.getElementById('apiCodeEdit')?.focus();
-}
-
-function copyApiExample() {
-  const text = apiEditing
-    ? (document.getElementById('apiCodeEdit')?.value || '')
-    : apiExampleCode(document.getElementById('apiLangSelect')?.value || 'node');
-
-  navigator.clipboard.writeText(text).then(() => {
-    alert('Código copiado!');
-  }).catch(() => {
-    alert('Não foi possível copiar automaticamente. Selecione o texto manualmente.');
-  });
+  const endpoints = [
+    { method: 'GET', path: '/api/public/admin/users', desc: 'Lista TODOS os usuários do painel.' },
+    { method: 'GET', path: '/api/public/admin/users/algumUsuario', desc: 'Detalhes de um usuário específico (troque "algumUsuario" pelo username real).' },
+    { method: 'POST', path: '/api/public/admin/users', desc: 'Cria um novo usuário.', body: { username: 'novoUsuario', password: 'senha123', role: 'user', plan: 'bronze', apiPlan: 'basico' } },
+    { method: 'PUT', path: '/api/public/admin/users/algumUsuario', desc: 'Edita role/plano/plano de API/senha de um usuário existente.', body: { role: 'user', plan: 'prata', apiPlan: 'pro' } },
+    { method: 'DELETE', path: '/api/public/admin/users/algumUsuario', desc: 'Remove um usuário do painel.' },
+    { method: 'GET', path: '/api/public/admin/accounts', desc: 'Lista TODAS as contas Steam do painel, de todos os usuários.' },
+    { method: 'GET', path: '/api/public/admin/logs', desc: 'Logs completos do painel (Dashboard e Webhooks).' }
+  ];
+  renderEndpointsInto('apiAdminEndpointsList', 'apiAdminLangSelect', endpoints, adminApiToken);
 }
 
 async function importConfig() {
@@ -1368,14 +1359,13 @@ function applyMeToUI() {
     badge.innerHTML = `<span class="dot"></span> ${escapeHtml(user.username)} · ${isAdmin ? 'Admin' : user.planName}`;
   }
 
-  // Abas/telas que são só do painel inteiro (admin)
+  // Abas/telas que são só do painel inteiro (admin) — API e API Admin ficam
+  // visíveis pra todo mundo (cada um só vê/gerencia o que o token dele permite).
   ['tabBtn-webhooks', 'tabBtn-importexport', 'tabBtn-bans'].forEach(id => {
     document.getElementById(id)?.classList.toggle('hidden', !isAdmin);
   });
-  document.getElementById('tabBtn-api')?.classList.toggle('hidden', false);
   document.getElementById('tabBtn-users')?.classList.toggle('hidden', !isAdmin);
   document.getElementById('steamKeyCard')?.classList.toggle('hidden', !isAdmin);
-  document.getElementById('apiAdminCard')?.classList.toggle('hidden', !isAdmin);
 
   const usage = document.getElementById('planUsageInfo');
   if (usage) {
@@ -1439,7 +1429,7 @@ function renderUsers() {
   if (!tbody) return;
 
   if (!usersList.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="color:#97a0b5; text-align:center;">Nenhum usuário cadastrado</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="color:#97a0b5; text-align:center;">Nenhum usuário cadastrado</td></tr>`;
     return;
   }
 
@@ -1447,98 +1437,57 @@ function renderUsers() {
     <tr>
       <td><strong>${escapeHtml(u.username)}</strong></td>
       <td>${u.role === 'admin' ? 'Admin' : 'Usuário'}</td>
-      <td>
-        <select id="plan-${escapeHtml(u.username)}" ${u.role === 'admin' ? 'disabled' : ''}>
-          <option value="bronze" ${u.plan === 'bronze' ? 'selected' : ''}>Bronze</option>
-          <option value="prata" ${u.plan === 'prata' ? 'selected' : ''}>Prata</option>
-          <option value="ouro" ${u.plan === 'ouro' ? 'selected' : ''}>Ouro</option>
-        </select>
-        <button class="btn-sm btn-ghost" onclick="changeUserPlan('${escapeHtml(u.username)}')" ${u.role === 'admin' ? 'disabled' : ''}>Salvar</button>
-      </td>
-      <td>${u.apiPlanName || 'Básico'} · ${u.apiLimit === null ? 'Ilimitado' : `${u.apiUsado}/${u.apiLimit}`}</td>
+      <td>${escapeHtml(u.planName)}</td>
+      <td>${escapeHtml(u.apiPlanName)}</td>
       <td>${fmtDateOnly(u.createdAt)}</td>
       <td class="users-actions">
-        <button class="btn-sm btn-ghost" onclick="openUserEditModal('${escapeHtml(u.username)}')">Editar</button>
-        <input type="password" id="pwd-${escapeHtml(u.username)}" placeholder="Nova senha" class="pwd-input">
-        <button class="btn-sm btn-ghost" onclick="resetUserPassword('${escapeHtml(u.username)}')">Definir senha</button>
+        <button class="btn-sm btn-ghost" onclick="openEditUserModal('${escapeHtml(u.username)}')">Editar</button>
         <button class="btn-sm btn-danger" onclick="deleteUser('${escapeHtml(u.username)}')">Excluir</button>
       </td>
     </tr>
   `).join('');
 }
 
-function openUserEditModal(username) {
-  const user = usersList.find(u => u.username === username);
-  if (!user) return;
-  const modalBody = document.getElementById('userEditModalBody');
-  if (!modalBody) return;
-  modalBody.innerHTML = `
-    <form id="userEditForm">
-      <div class="form-group">
-        <label>Usuário</label>
-        <input value="${escapeHtml(user.username)}" disabled>
-      </div>
-      <div class="form-group">
-        <label>Função</label>
-        <select id="editUserRole">
-          <option value="user" ${user.role === 'user' ? 'selected' : ''}>Usuário</option>
-          <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Plano do site</label>
-        <select id="editUserPlan">
-          <option value="bronze" ${user.plan === 'bronze' ? 'selected' : ''}>Bronze</option>
-          <option value="prata" ${user.plan === 'prata' ? 'selected' : ''}>Prata</option>
-          <option value="ouro" ${user.plan === 'ouro' ? 'selected' : ''}>Ouro</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Plano de API</label>
-        <select id="editUserApiPlan">
-          <option value="basico" ${user.apiPlan === 'basico' ? 'selected' : ''}>Básico (100)</option>
-          <option value="pro" ${user.apiPlan === 'pro' ? 'selected' : ''}>Pro (1000)</option>
-          <option value="ilimitado" ${user.apiPlan === 'ilimitado' ? 'selected' : ''}>Ilimitado</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Nova senha</label>
-        <input id="editUserPassword" type="password" placeholder="Deixe em branco para manter a atual" autocomplete="new-password">
-      </div>
-      <div class="form-group">
-        <label>Contas vinculadas</label>
-        <input value="${user.contasCadastradas ?? 0}" disabled>
-      </div>
-      <button class="btn btn-primary" type="submit">Salvar alterações</button>
-    </form>
-    <div id="userEditMessage"></div>
-  `;
-  document.getElementById('userEditForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const payload = {
-      username: user.username,
-      role: document.getElementById('editUserRole')?.value,
-      plan: document.getElementById('editUserPlan')?.value,
-      apiPlan: document.getElementById('editUserApiPlan')?.value,
-      password: document.getElementById('editUserPassword')?.value || undefined
-    };
-    const result = await postJSON('/api/users/update', payload);
-    const msg = document.getElementById('userEditMessage');
-    if (msg) {
-      msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
-      msg.textContent = result.message || '';
-    }
-    if (result.success) {
-      loadUsers();
-      setTimeout(() => closeUserEditModal(), 700);
-    }
-  });
-  document.getElementById('userEditModalOverlay').classList.remove('hidden');
+// ------ Modal "Editar usuário" (admin) ------
+function openEditUserModal(username) {
+  const u = usersList.find(x => x.username === username);
+  if (!u) return;
+  document.getElementById('editUserForm').dataset.username = username;
+  document.getElementById('editUserSub').textContent = `${u.username} · ${u.contasCadastradas ?? 0} conta(s) Steam cadastrada(s)`;
+  document.getElementById('editUserRole').value = u.role;
+  document.getElementById('editUserPlan').value = u.plan;
+  document.getElementById('editUserApiPlan').value = u.apiPlan;
+  document.getElementById('editUserPassword').value = '';
+  document.getElementById('editUserMessage').textContent = '';
+  document.getElementById('editUserModalOverlay').classList.remove('hidden');
 }
 
-function closeUserEditModal() {
-  document.getElementById('userEditModalOverlay')?.classList.add('hidden');
+function closeEditUserModal() {
+  document.getElementById('editUserModalOverlay').classList.add('hidden');
 }
+
+document.getElementById('editUserForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = e.target.dataset.username;
+  const role = document.getElementById('editUserRole').value;
+  const plan = document.getElementById('editUserPlan').value;
+  const apiPlan = document.getElementById('editUserApiPlan').value;
+  const password = document.getElementById('editUserPassword').value;
+  const msg = document.getElementById('editUserMessage');
+
+  const payload = { username, role, plan, apiPlan };
+  if (password) payload.password = password;
+
+  const result = await postJSON('/api/users/update', payload);
+  if (msg) {
+    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
+    msg.textContent = result.message || '';
+  }
+  if (result.success) {
+    loadUsers();
+    setTimeout(closeEditUserModal, 600);
+  }
+});
 
 document.getElementById('userForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1559,75 +1508,10 @@ document.getElementById('userForm')?.addEventListener('submit', async (e) => {
   }
 });
 
-async function changeUserPlan(username) {
-  const select = document.getElementById(`plan-${username}`);
-  if (!select) return;
-  const result = await postJSON('/api/users/plan', { username, plan: select.value });
-  if (result.success) loadUsers();
-}
-
-async function resetUserPassword(username) {
-  const input = document.getElementById(`pwd-${username}`);
-  const password = input?.value || '';
-  if (password.length < 4) { alert('Digite uma senha com pelo menos 4 caracteres.'); return; }
-  const result = await postJSON('/api/users/password', { username, password });
-  if (result.success) {
-    alert(`Senha de "${username}" atualizada.`);
-    if (input) input.value = '';
-  }
-}
-
 async function deleteUser(username) {
   if (!confirm(`Excluir o usuário "${username}"? As contas Steam dele continuam no painel, mas sem dono.`)) return;
   const result = await postJSON('/api/users/delete', { username });
   if (result.success) loadUsers();
 }
 
-async function saveUserWebhook() {
-  const url = document.getElementById('userWebhookUrl')?.value.trim() || '';
-  const active = document.getElementById('userWebhookActive')?.checked || false;
-  const result = await postJSON('/api/webhook-config', { url, active });
-  const msg = document.getElementById('userWebhookMessage');
-  if (msg) {
-    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
-    msg.textContent = result.message || '';
-  }
-  if (result.success) {
-    loadUserWebhookConfig();
-  }
-}
-
-async function loadUserWebhookConfig() {
-  try {
-    const res = await fetch('/api/webhook-config');
-    const result = await res.json();
-    if (!result.success) return;
-    const urlInput = document.getElementById('userWebhookUrl');
-    const activeInput = document.getElementById('userWebhookActive');
-    if (urlInput) urlInput.value = result.webhookUrl || '';
-    if (activeInput) activeInput.checked = !!result.webhookActive;
-  } catch { }
-}
-
-async function testUserWebhook() {
-  const result = await postJSON('/api/webhook-config/test', {});
-  const msg = document.getElementById('userWebhookMessage');
-  if (msg) {
-    msg.style.color = result.success ? '#8fe0b2' : '#ffb0b0';
-    msg.textContent = result.message || '';
-  }
-}
-
-function copyUserWebhookUrl() {
-  const input = document.getElementById('userWebhookUrl');
-  if (!input || !input.value) return alert('Configure a URL do webhook antes de copiar.');
-  navigator.clipboard.writeText(input.value).then(() => {
-    alert('URL do webhook copiada!');
-  }).catch(() => {
-    input.select();
-    document.execCommand('copy');
-  });
-}
-
 loadMe();
-loadUserWebhookConfig();
