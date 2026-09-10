@@ -30,5 +30,37 @@
     "mensagem": "Login bem-sucedido (admin/ouro).",
     "username": "admin",
     "channel": "webhooks"
+  },
+  {
+    "id": "mtuvhzjhgvezp",
+    "timestamp": 1789005190445,
+    "evento": "SERVIDOR_INICIADO",
+    "mensagem": "O painel foi iniciado/reiniciado.",
+    "username": null,
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtuvjx0gpx5o1",
+    "timestamp": 1789005280480,
+    "evento": "LOGIN",
+    "mensagem": "Login bem-sucedido (admin/ouro).",
+    "username": "admin",
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtuvkpni1y3m7",
+    "timestamp": 1789005317598,
+    "evento": "USUARIO_ATUALIZADO",
+    "mensagem": "Usuário \"admin\" editado pelo admin \"admin\" · role=admin · plano=Ouro · apiPlano=Pro.",
+    "username": null,
+    "channel": "webhooks"
+  },
+  {
+    "id": "mtuvl3y860lij",
+    "timestamp": 1789005336129,
+    "evento": "USUARIO_ATUALIZADO",
+    "mensagem": "Usuário \"admin\" editado pelo admin \"admin\" · role=admin · plano=Ouro · apiPlano=Ilimitado.",
+    "username": null,
+    "channel": "webhooks"
   }
 ]
